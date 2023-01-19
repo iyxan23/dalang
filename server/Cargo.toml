@@ -1,0 +1,15 @@
+[package]
+name = "dalang-server"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "dalang_server"
+path = "src/dalang_server/lib.rs"
+
+[[bin]]
+name = "dalang-server"
+test = false
+doc = false
+
+[dependencies]
