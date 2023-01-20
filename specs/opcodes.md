@@ -23,18 +23,21 @@ Client:
    Fields:
     - `username`: str
     - `password`: str
-   Responses: Server `0x00`, `0x02`
+   Responses: Server `0x12`, `0x02`
 
  - `0x11`: Login with token
    Fields:
     - `token`: str
-   Responses: Server `0x00`
+   Responses: Server `0x12`
 
  - `0x20`: Register
    Fields:
     - `username`: str
     - `password`: str
    Responses: Server `0x01`, `0x03`
+
+ - `0x21`: Check if register is enabled
+   Responses: Server `0x21`, `0x00`
  
  - `0xf0`: Check if username exists
    Fields:
@@ -49,11 +52,12 @@ Server:
  - `0x00`: Success response
  - `0x10`: Login failed (unknown username/wrong password)
  - `0x11`: Login failed (token expired)
- - `0x12`: Token login success
+ - `0x12`: Login success
    Fields:
-    - `new`: str
+    - `token`: str
  - `0x20`: Register failed (username taken)
  - `0x21`: Register failed (feature disabled)
+ - `0xffff`: Error: Already logged in
 
 ### Category: User `0x02`
 
