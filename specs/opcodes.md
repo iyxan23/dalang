@@ -98,7 +98,7 @@ Server:
     - `projects`:
       List of:
        - `id`: u32
-       - `title`: u32
+       - `title`: str
        - `lastedit`: u64 (timestamp)
        - `created`: u64 (timestamp)
        - `imgid`: u32 (used on Client `0x13`)
@@ -120,11 +120,25 @@ Client:
  - `0x01`: Project name
    Responses: Server `0x01`
 
- - `0x100`: Video Preview
- - `0x200`: Timeline
+ - `0x100`: Video preview frame request
+ - `0x101`: Video preview get resolution
+
+ - `0x200`: Play video
+ - `0x201`: Play video in reverse
+ - `0x202`: Pause video
+ - `0x203`: Get entire length
+ - `0x204`: Get entire length in frames
+ - `0x205`: Seek
+   Fields: 
+    - time: u64
+
+
  - `0x300`: Effects
+
  - `0x400`: Elements
+
  - `0x500`: Settings
+
  - `0xf00`: Special
 
  - `0x00ff`: Close project
@@ -135,5 +149,12 @@ Server:
  - `0x01`: Project name response
    Fields:
     - `name`: str
+
+ - `0x100`: Video preview frame data
+   Fields:
+    - data: 
+    - time: u64
+
+ - `0x200`: Set tracker? position
 
  - `0xffff`: Error: No project opened
