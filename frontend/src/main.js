@@ -12,9 +12,8 @@ const app = createApp(App);
 app.use(createPinia());
 app.use(router);
 
-// dalang runs on port 2821
 let connection = new ServerConnection(
-  "wss://" + window.location.hostname + ":2821"
+  "wss://" + window.location.hostname + "/dalang"
 );
 
 app.provide("con", connection);
