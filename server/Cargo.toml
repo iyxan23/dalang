@@ -1,5 +1,6 @@
 [package]
-name = "dalang-server"
+name = "dalang"
+description = "A web-based server-based video editor"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,8 +9,9 @@ name = "dalang_server"
 path = "src/dalang_server/lib.rs"
 
 [[bin]]
-name = "dalang-server"
+name = "dalang"
 test = false
 doc = false
 
 [dependencies]
+clap = { version = "^4.1.4", features = ["cargo"] }
