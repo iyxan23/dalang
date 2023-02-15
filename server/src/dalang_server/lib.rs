@@ -44,6 +44,8 @@ mod server {
     use super::storage::Storage;
 
     pub struct DalangServer<AuthActor: Authenticator> {
+        authenticator: Option<Addr<AuthActor>>,
+        storages: HashMap<u64, Addr<Storage>>,
     }
 
     impl<AuthActor: Authenticator> Actor for DalangServer<AuthActor> {
