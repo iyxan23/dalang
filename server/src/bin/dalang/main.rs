@@ -1,9 +1,8 @@
 use clap::{arg, Command, ArgAction, command};
 
-fn main() {
+#[actix_web::main]
+async fn main() {
     let matches = command!()
-        .arg_required_else_help(true)
-        .subcommand_required(true)
         .subcommand(
             Command::new("start")
                 .about("Start the server")
@@ -14,7 +13,13 @@ fn main() {
 
                     arg!(-s --service "Create a new systemd service, enable it, and start it")
                         .action(ArgAction::SetTrue)
-                        .group("background_start")
+                        .group("background_start"),
+
+                    arg!(-f --"static-files" <PATH> "Specify a path to serve static files, dalang serves its own by default.")
+                        .action(ArgAction::Set),
+
+                    arg!(-w --"ws-only" --"dont-serve" "Make dalang to only run its websocket server")
+                        .action(ArgAction::SetTrue)
                 ])
         )
         .subcommand(
@@ -24,6 +29,10 @@ fn main() {
         .get_matches();
 
     match matches.subcommand() {
+        Some(("config", _sub_matches)) => {
+            println!("Querying and setting configuration for the app");
+        }
+
         Some(("start", sub_matches)) => {
             let daemonize = sub_matches.get_flag("daemonize");
             let service = sub_matches.get_flag("service");
@@ -37,8 +46,11 @@ fn main() {
             }
         }
 
-        Some(("config", _sub_matches)) => {
-            println!("Querying and setting configuration for the app");
+        None => {
+            println!("Starting the server");
+
+            dalang_server::start(None).await
+                .expect("Failed to start the server");
         }
 
         _ => unreachable!()
