@@ -12,8 +12,9 @@ const app = createApp(App);
 app.use(createPinia());
 app.use(router);
 
+const proto = location.protocol.startsWith("https") ? "wss" : "ws";
 let connection = new ServerConnection(
-  "wss://" + window.location.hostname + "/dalang"
+  `${proto}://${window.location.hostname}/dalang`
 );
 
 app.provide("con", connection);
