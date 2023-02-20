@@ -14,34 +14,25 @@ pub mod messages {
     use actix::Message;
 
     // Login message, results in the UID of the user
+    #[derive(Message)]
+    #[rtype("Result<u64, ()>")]
     pub struct Login {
         pub username: String,
         pub password: String,
     }
 
-    impl Message for Login {
-        // todo: a custom error type
-        type Result = Result<u64, ()>;
-    }
-
     // Register message, returns the UID of the new user
+    #[derive(Message)]
+    #[rtype("Result<u64, ()>")]
     pub struct Register {
         pub username: String,
         pub password: String
     }
 
-    impl Message for Register {
-        // todo: a custom error type
-        type Result = Result<u64, ()>;
-    }
-
     // Retrieves a user data, currently it only returns the username
+    #[derive(Message)]
+    #[rtype("Result<String, ()>")]
     pub struct GetUser {
         pub uid: u64
-    }
-
-    impl Message for GetUser {
-        // todo: custom error type
-        type Result = Result<String, ()>;
     }
 }
