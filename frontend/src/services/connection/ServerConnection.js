@@ -32,7 +32,10 @@ export default class ServerConnection extends EventTarget {
   }
 
   connected() {
-    return this.#ws != null;
+    if (this.#ws === null) return false;
+    if (this.#ws.readyState === 1) return true;
+
+    return false;
   }
 
   constructor(dalangServer) {
@@ -40,9 +43,18 @@ export default class ServerConnection extends EventTarget {
     this.#url = dalangServer;
   }
 
-  #messageListener(event) {
+  async #messageListener(event) {
+    if (!(event.data instanceof Blob)) {
+      console.warn("Got a text message, ignoring: ", event.data);
+      return;
+    }
+
+    const msg = new Uint8Array(await event.data.arrayBuffer());
+    console.debug("retrieved", event);
+    console.debug("data", msg);
+
     // decode the data
-    const { o: opcode, c: category, d: data } = decode(event.data);
+    const [opcode, category, data] = decode(msg);
 
     if (this.#listeners[[opcode, category]] != undefined) {
       for (const listener of this.#listeners[[opcode, category]]) {
@@ -80,8 +92,9 @@ export default class ServerConnection extends EventTarget {
     }
 
     // encode the data
-    const obj = encode({ o: opcode, c: category, d: data });
+    const obj = encode([opcode | (category << 16), data]);
 
+    console.debug("sending", obj);
     this.#ws.send(obj);
   }
 
