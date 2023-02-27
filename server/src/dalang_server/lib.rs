@@ -6,6 +6,7 @@ use actix_web_actors::ws;
 mod auth;
 mod session;
 mod storage;
+mod protocol;
 
 #[actix_web::get("/ws")]
 async fn ws_endpoint(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
