@@ -13,10 +13,21 @@ export default {
     <img id="logo" src="../assets/logo.svg" />
     <div id="card">
       <h3>Authenticate</h3>
-      <div id="inputs">
-        <input placeholder="Username" id="username" type="text" />
-        <input placeholder="Password" id="password" type="password" />
-      </div>
+      <form id="inputs">
+        <input
+          autocomplete="username"
+          placeholder="Username"
+          id="username"
+          type="text"
+        />
+
+        <input
+          autocomplete="current-password"
+          placeholder="Password"
+          id="password"
+          type="password"
+        />
+      </form>
 
       <div id="buttons">
         <div @onclick="null" id="register">Register</div>
