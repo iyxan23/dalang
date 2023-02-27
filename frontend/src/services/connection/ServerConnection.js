@@ -1,13 +1,8 @@
 import { encode, decode } from "msgpack-lite";
 
-export default class ServerConnection {
+export default class ServerConnection extends EventTarget {
   #listeners = {};
   #ws = null;
-  #events = {
-    open: new Event("open"),
-    close: new Event("close"),
-  };
-
   #url = undefined;
 
   connect() {
@@ -18,16 +13,21 @@ export default class ServerConnection {
 
     this.#ws = new WebSocket(this.#url, "dalang");
 
-    this.#ws.onmessage = this.messageListener;
-    this.#ws.onopen = () => dispatchEvent(this.#events.open);
+    this.#ws.onmessage = this.#messageListener;
+    this.#ws.onopen = () => {
+      this.dispatchEvent(new Event("open"));
+    };
 
     this.#ws.onclose = () => {
-      dispatchEvent(this.#events.close);
+      console.debug("connection closed");
+
+      this.dispatchEvent(new Event("close"));
       this.#ws = null;
     };
 
     this.#ws.onerror = (event) => {
-      console.error(event);
+      console.error("connection error", event);
+      this.#ws = null;
     };
   }
 
@@ -36,6 +36,7 @@ export default class ServerConnection {
   }
 
   constructor(dalangServer) {
+    super();
     this.#url = dalangServer;
   }
 

@@ -1,5 +1,21 @@
 <script setup>
 import { RouterView } from "vue-router";
+import { inject, onMounted } from "vue";
+
+const connection = inject("con");
+
+onMounted(() => {
+  console.debug("connecting");
+
+  if (!connection.connected()) {
+    connection.connect();
+  }
+
+  connection.addEventListener("open", () => {
+    console.debug("connection opened");
+    // do things
+  });
+});
 </script>
 
 <template>
