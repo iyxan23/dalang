@@ -1,13 +1,15 @@
-use actix::{Actor, Handler};
+use actix::{Actor, Handler, Context};
 
 pub mod sqlite;
 
 // An authenticator is an actor that handles Login and Register messages
 pub trait Authenticator:
-    Actor
+    Actor<Context = Context<Self>>
     + Handler<messages::Login>
     + Handler<messages::Register>
     + Handler<messages::GetUser>
+
+    + Send + Sync
 {}
 
 pub mod messages {

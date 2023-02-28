@@ -6,8 +6,6 @@ use pwhash::bcrypt::{hash, verify};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use r2d2_sqlite::rusqlite::{OptionalExtension, params};
-use rand::Rng;
-use rand::rngs::ThreadRng;
 
 use super::Authenticator;
 use super::messages as auth_msg;
@@ -16,8 +14,6 @@ use super::messages as auth_msg;
 pub struct SQLiteAuthenticator {
     db_file: Option<PathBuf>,
     pool: Option<Pool<SqliteConnectionManager>>,
-
-    uid_rand_thread: ThreadRng
 }
 
 impl SQLiteAuthenticator {
@@ -27,7 +23,6 @@ impl SQLiteAuthenticator {
         SQLiteAuthenticator {
             db_file: Some(db_file),
             pool: None,
-            uid_rand_thread: rand::thread_rng()
         }
     }
 
@@ -36,7 +31,6 @@ impl SQLiteAuthenticator {
         SQLiteAuthenticator {
             db_file: None,
             pool: None,
-            uid_rand_thread: rand::thread_rng()
         }
     }
 }
@@ -132,9 +126,9 @@ impl Handler<auth_msg::Register> for SQLiteAuthenticator {
         if changed != 0 {
             Err(())?
         }
-        
+
         // we can then insert our new user
-        let uid = self.uid_rand_thread.gen::<u64>();
+        let uid = rand::random();
 
         if let Ok(changed) = conn.execute(
             QUERY_USER_INSERT,
@@ -151,7 +145,7 @@ impl Handler<auth_msg::Register> for SQLiteAuthenticator {
 impl Handler<auth_msg::GetUser> for SQLiteAuthenticator {
     type Result = Result<String, ()>;
 
-    fn handle(&mut self, msg: auth_msg::GetUser, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: auth_msg::GetUser, _ctx: &mut Self::Context) -> Self::Result {
         let conn =
             self.pool
                 .as_ref().expect("pool not initialized")
