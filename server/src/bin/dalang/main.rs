@@ -1,4 +1,5 @@
 use clap::{arg, Command, ArgAction, command};
+use dalang_server::components::auth::SQLiteAuthenticator;
 
 #[actix_web::main]
 async fn main() {
@@ -49,7 +50,7 @@ async fn main() {
         None => {
             println!("Starting the server");
 
-            dalang_server::start(None).await
+            dalang_server::start(None, || SQLiteAuthenticator::new_in_memory()).await
                 .expect("Failed to start the server");
         }
 
