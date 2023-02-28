@@ -36,7 +36,15 @@ struct ServerState<AuthActor: auth::Authenticator> {
     server: Addr<DalangServer<AuthActor>>,
 }
 
+/// Starts the dalang server.
+/// 
+/// # Arguments
+/// 
+/// * `endpoint` - An endpoint where the websocket server will be run. Will use `/` if not specified.
+/// * `serve_static` - Tell the library to serve static files in this directory. Will not serve any static files if not specified.
+/// * `create_auth` - The function to construct an Authenticator of the given `AuthActor` type parameter.
 pub async fn start<AuthActor, CreateAuthFn>(
+    endpoint: Option<String>,
     serve_static: Option<PathBuf>,
     create_auth: CreateAuthFn,
 ) -> std::io::Result<()>
@@ -63,7 +71,10 @@ where
         let mut app = App::new()
             .app_data(server.clone())
             .wrap(middleware::Logger::default())
-            .route("/dalang", web::get().to(ws_endpoint::<AuthActor>));
+            .route(
+                endpoint.clone().unwrap_or("/".to_string()).as_str(),
+                web::get().to(ws_endpoint::<AuthActor>)
+            );
 
         if let Some(static_files) = &serve_static {
             app = app.service(actix_files::Files::new("/", static_files));

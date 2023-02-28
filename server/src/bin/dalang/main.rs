@@ -50,8 +50,11 @@ async fn main() {
         None => {
             println!("Starting the server");
 
-            dalang_server::start(None, || SQLiteAuthenticator::new_in_memory()).await
-                .expect("Failed to start the server");
+            dalang_server::start(
+                Some("/dalang".to_string()),
+                None,
+                || SQLiteAuthenticator::new_in_memory()
+            ).await.expect("Failed to start the server");
         }
 
         _ => unreachable!()
