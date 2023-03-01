@@ -54,7 +54,10 @@ export default class ServerConnection extends EventTarget {
     console.debug("data", msg);
 
     // decode the data
-    const [opcode, category, data] = decode(msg);
+    const [opcode_union, data] = decode(msg);
+
+    const opcode = opcode_union & 0xffff;
+    const category = opcode_union << 16;
 
     if (this.#listeners[[opcode, category]] != undefined) {
       for (const listener of this.#listeners[[opcode, category]]) {
