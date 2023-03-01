@@ -1,8 +1,8 @@
 The protocol used by dalang uses a packet-based approach to communicate data between the server and the client.
 
-A packet is an [msgpack](https://msgpack.org) object with two fields:
- - `opcode` (u32): The opcode of the packet
- - `data` (any): The payload for this packet, can be anything depending on the opcode
+A packet is an [msgpack](https://msgpack.org) array with two items:
+ - `0` (u32): The opcode of the packet
+ - `1` (any): The payload for this packet, can be anything depending on the opcode
 
 ### Opcode
 

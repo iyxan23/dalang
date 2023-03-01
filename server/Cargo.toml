@@ -15,7 +15,11 @@ doc = false
 
 [dependencies]
 clap = { version = "4", features = ["cargo"] }
+
+serde = { version = "1", features = ["derive"] }
 rmp = "^0.8.11"
+rmp-serde = "1"
+
 pwhash = "1"
 rand = "^0.8.5"
 

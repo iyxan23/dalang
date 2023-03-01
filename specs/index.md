@@ -10,9 +10,23 @@ A dalang server acts as an instance of dalang, it stores and authenticates users
 
 On the first time the user opens dalang's endpoint, they will be greeted with the login page. Since dalang is a single page application, we maintain a single (secure) websocket connetion for the whole session.
 
-At the event of the initiation of the websocket connection, the client will be sent a text package by the server the version of the server using semver. E.
+At the event of the initiation of the websocket connection, the client will be sent a text packet by the server that includes the protocol version and extensions that the server supports encoded with msgpack.
+
+The packet in JSON is:
+```json
+[[int (major), int (minor), int (patch)], [str+] (extensions)]
+```
+
+ - `[0]` is an array of 3 ints, containing the semver of the server.
+ - `[1]` is a dynamic array of strings that contains the extensions that the server supports.
 
 Even though dalang is meant to be a web-based video editor---where the editor itself is being sent to the user by the backend---we want to open up the possiblity of other people creating different clients for dalang. Sending the backend version will make compatibility between versions easier.
+
+As the client receives this, it must try to match its protocol version with the server's protocol version.
+
+The client should fail or disconnect if the major version mismatches. A difference between its minor or patch version should still be compatible.
+
+Currently, dalang has the major of `0`, which means it's not stable yet. Before the release of `1`, any minor or patch version changes are incompatible with each other for the purpose of development.
 
 ### Authentication
 

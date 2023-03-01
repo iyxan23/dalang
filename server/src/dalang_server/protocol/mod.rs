@@ -1,4 +1,33 @@
+use rmp::encode::{ValueWriteError, write_array_len, write_u8, write_str_len, write_str};
+
 pub const VERSION: &str = "0.0.1";
+
+pub const VERSION_MAJOR: u8 = 0;
+pub const VERSION_MINOR: u8 = 0;
+pub const VERSION_PATCH: u8 = 1;
+
+pub const EXTENSIONS: [&str; 0] = [];
+
+// maybe cache this in some way? I'm too lazy to use `lazy_static` (pun intended)
+pub fn protocol_version_packet() -> Result<Vec<u8>, ValueWriteError> {
+    let mut buffer = Vec::new();
+
+    write_array_len(&mut buffer, 2)?;
+
+    write_array_len(&mut buffer, 3)?;
+    write_u8(&mut buffer, VERSION_MAJOR)?;
+    write_u8(&mut buffer, VERSION_MINOR)?;
+    write_u8(&mut buffer, VERSION_PATCH)?;
+
+    write_array_len(&mut buffer, EXTENSIONS.len() as u32)?;
+
+    for extension in EXTENSIONS {
+        write_str_len(&mut buffer, extension.len() as u32)?;
+        write_str(&mut buffer, extension)?;
+    }
+
+    Ok(buffer)
+}
 
 pub enum ClientPacket {
     Authentication(authentication::ClientAuthenticationPacket),
