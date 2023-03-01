@@ -48,12 +48,13 @@ async fn main() {
         }
 
         None => {
-            println!("Starting the server");
+            println!("Starting the server in `/dalang` on 127.0.0.1:8080");
 
             dalang_server::start(
                 Some("/dalang".to_string()),
                 None,
-                || SQLiteAuthenticator::new_in_memory()
+                || SQLiteAuthenticator::new_in_memory(),
+                "127.0.0.1:8080"
             ).await.expect("Failed to start the server");
         }
 

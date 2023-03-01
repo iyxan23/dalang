@@ -1,4 +1,4 @@
-use std::{path::PathBuf, collections::HashMap};
+use std::{path::PathBuf, collections::HashMap, net::ToSocketAddrs};
 
 use actix::{Actor, Addr};
 use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer, middleware};
@@ -43,10 +43,11 @@ struct ServerState<AuthActor: auth::Authenticator> {
 /// * `endpoint` - An endpoint where the websocket server will be run. Will use `/` if not specified.
 /// * `serve_static` - Tell the library to serve static files in this directory. Will not serve any static files if not specified.
 /// * `create_auth` - The function to construct an Authenticator of the given `AuthActor` type parameter.
-pub async fn start<AuthActor, CreateAuthFn>(
+pub async fn start<AuthActor, CreateAuthFn, S: ToSocketAddrs>(
     endpoint: Option<String>,
     serve_static: Option<PathBuf>,
     create_auth: CreateAuthFn,
+    addr: S
 ) -> std::io::Result<()>
 
 where
@@ -82,7 +83,7 @@ where
 
         app
     })
-    .bind(("127.0.0.1", 8080))?
+    .bind(addr)?
     .run()
     .await
 }
