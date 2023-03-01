@@ -56,6 +56,8 @@ impl Actor for SQLiteAuthenticator {
         // create a new table if it doesnt exist
         let conn = pool.get().expect("failed to retrieve connection");
         conn.execute(QUERY_USERS_CREATE, []).expect("failed to create table");
+
+        self.pool = Some(pool);
     }
 }
 
@@ -158,5 +160,36 @@ impl Handler<auth_msg::GetUser> for SQLiteAuthenticator {
             params![msg.uid],
             |row| Ok(row.get::<_, String>("username")?)
         ).map_err(|_| ())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use actix::Actor;
+
+    use super::SQLiteAuthenticator;
+    use super::super::messages as auth_msg;
+
+    #[actix_rt::test]
+    async fn sqlite_simple_auth_test_0() {
+        let addr = SQLiteAuthenticator::new_in_memory().start();
+
+        let register_uid = addr.send(auth_msg::Register {
+            username: "loremipsum".to_string(),
+            password: "1234567890".to_string(),
+        }).await.expect("failed send register msg").expect("failed to register");
+
+        let login_uid = addr.send(auth_msg::Login {
+            username: "loremipsum".to_string(),
+            password: "1234567890".to_string(),
+        }).await.expect("failed send login msg").expect("failed to login");
+
+        assert_eq!(register_uid, login_uid);
+
+        let username = addr.send(auth_msg::GetUser {
+            uid: register_uid,
+        }).await.expect("failed to retrieve username").expect("failed to retrieve username");
+
+        assert_eq!(username, "loremipsum".to_string());
     }
 }

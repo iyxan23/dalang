@@ -13,6 +13,9 @@ name = "dalang"
 test = false
 doc = false
 
+[dev-dependencies]
+actix-rt = "^2.8"
+
 [dependencies]
 clap = { version = "4", features = ["cargo"] }
 
@@ -29,4 +32,4 @@ actix-files = "^0.6.2"
 actix = "^0.13.0"
 
 r2d2 = "^0.8.10"
-r2d2_sqlite = "^0.21.0"
+r2d2_sqlite = { version = "^0.21.0", features = ["bundled"] }
