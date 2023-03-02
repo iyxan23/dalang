@@ -19,9 +19,8 @@ actix-rt = "^2.8"
 [dependencies]
 clap = { version = "4", features = ["cargo"] }
 
-serde = { version = "1", features = ["derive"] }
-rmp = "^0.8.11"
-rmp-serde = "1"
+rmp = "^0.8.2"
+rmpv = "^1.0.0"
 
 pwhash = "1"
 rand = "^0.8.5"

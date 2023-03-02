@@ -1,4 +1,6 @@
-use rmp::encode::{ValueWriteError, write_array_len, write_u8, write_str_len, write_str};
+use std::{any::Provider, io};
+
+use rmp::{encode::{ValueWriteError, write_array_len, write_u8, write_str_len, write_str}, decode::{read_marker, ValueReadError, MarkerReadError, read_u32, read_map_len}};
 
 pub const VERSION: &str = "0.0.1";
 
@@ -35,15 +37,87 @@ pub enum ClientPacket {
     Editor(editor::ClientEditorPacket)
 }
 
-impl From<&[u8]> for ClientPacket {
-    fn from(value: &[u8]) -> Self {
-        todo!()
+#[derive(Debug)]
+pub enum PacketDecodeError {
+    InvalidStructure,
+    UnknownOpcode { category: Category, opcode: u16 },
+    UnknownCategory { given_category: u16 },
+    InvalidPayload { category: Category, opcode: u16 },
+    Msgpack(ValueReadError),
+}
+
+impl From<ValueReadError> for PacketDecodeError {
+    fn from(value: ValueReadError) -> Self {
+        Self::Msgpack(value)
     }
 }
 
-impl Into<Vec<u8>> for ClientPacket {
-    fn into(self) -> Vec<u8> {
-        todo!()
+impl From<MarkerReadError> for PacketDecodeError {
+    fn from(value: MarkerReadError) -> Self {
+        Self::Msgpack(ValueReadError::InvalidMarkerRead(value.0))
+    }
+}
+
+impl<Opcode: Into<u16> + TryFrom<u16>> From<(Category, PacketCategoryDecodeError<Opcode>)> for PacketDecodeError {
+    fn from((category, value): (Category, PacketCategoryDecodeError<Opcode>)) -> Self {
+        match value {
+            PacketCategoryDecodeError::UnknownOpcode { opcode }
+                => PacketDecodeError::UnknownOpcode { category, opcode },
+
+            PacketCategoryDecodeError::InvalidPayload { opcode }
+                => PacketDecodeError::InvalidPayload { category, opcode: opcode.into() },
+            
+            PacketCategoryDecodeError::Msgpack(err)
+                => PacketDecodeError::Msgpack(err),
+        }
+    }
+}
+
+impl TryFrom<&[u8]> for ClientPacket {
+    type Error = PacketDecodeError;
+
+    fn try_from(mut value: &[u8]) -> Result<Self, Self::Error> {
+        // the client packet is an array of two items:
+        // 0 - the opcode
+        // 1 - an object of payload, may be null
+
+        // read an array of two items
+        let rmp::Marker::FixArray(2) = read_marker(&mut value)? else {
+            Err(PacketDecodeError::InvalidStructure)?
+        };
+
+        let opcode = read_u32(&mut value)?;
+        let category = (opcode >> 16) as u16; 
+
+        let Ok(category): Result<Category, _> = category.try_into() else {
+            // unknown category
+            Err(PacketDecodeError::UnknownCategory { given_category: category })?
+        };
+
+        let opcode = (opcode & 0xffff) as u16;
+
+        Ok(match category {
+            Category::Authentication => 
+                ClientPacket::Authentication(
+                    authentication::ClientAuthenticationPacket
+                        ::decode_from(opcode, &value)
+
+                        // include category as needed by the From trait
+                        .map_err(|e| (category, e))?
+                ),
+            Category::User => todo!(),
+            Category::Editor => todo!(),
+        })
+    }
+}
+
+impl TryInto<Vec<u8>> for ClientPacket {
+    type Error = ValueWriteError;
+
+    fn try_into(self) -> Result<Vec<u8>, Self::Error> {
+        // seems a bit of a waste to implement
+        // servers don't need to serialize client packets
+        unimplemented!()
     }
 }
 
@@ -51,19 +125,6 @@ pub enum ServerPacket {
     Authentication(authentication::ServerAuthenticationPacket),
     User(user::ServerUserPacket),
     Editor(editor::ServerEditorPacket)
-}
-
-
-impl From<&[u8]> for ServerPacket {
-    fn from(value: &[u8]) -> Self {
-        todo!()
-    }
-}
-
-impl Into<Vec<u8>> for ServerPacket {
-    fn into(self) -> Vec<u8> {
-        todo!()
-    }
 }
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
@@ -74,21 +135,111 @@ pub enum Category {
     Editor = 0x03,
 }
 
+impl TryFrom<u16> for Category {
+    type Error = ();
+
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        Ok(match value {
+            0x01 => Category::Authentication,
+            0x02 => Category::User,
+            0x03 => Category::Editor,
+
+            _ => Err(())?,
+        })
+    }
+}
+
+pub enum PacketCategoryDecodeError<Opcode>
+where Opcode: Into<u16> + TryFrom<u16>
+{
+    UnknownOpcode { opcode: u16 },
+    InvalidPayload { opcode: Opcode },
+    Msgpack(ValueReadError),
+}
+
+impl<Opcode> From<ValueReadError> for PacketCategoryDecodeError<Opcode>
+where Opcode: Into<u16> + TryFrom<u16>
+{
+    fn from(value: ValueReadError) -> Self {
+        PacketCategoryDecodeError::Msgpack(value)
+    }
+}
+
+impl<Opcode> From<rmpv::decode::Error> for PacketCategoryDecodeError<Opcode>
+where Opcode: Into<u16> + TryFrom<u16>
+{
+    fn from(value: rmpv::decode::Error) -> Self {
+        match value {
+            rmpv::decode::Error::InvalidMarkerRead(err)
+                => PacketCategoryDecodeError::Msgpack(ValueReadError::InvalidMarkerRead(err)),
+            rmpv::decode::Error::InvalidDataRead(err)
+                => PacketCategoryDecodeError::Msgpack(ValueReadError::InvalidDataRead(err)),
+            rmpv::decode::Error::DepthLimitExceeded
+                => PacketCategoryDecodeError::Msgpack(ValueReadError::InvalidDataRead(
+                    io::Error::new(value.kind(), value)
+                ))
+        }
+    }
+}
+
+trait PacketDecoder
+where Self: Sized {
+    type Opcode: Into<u16> + TryFrom<u16>;
+
+    fn decode_from(opcode: u16, payload: &[u8]) -> Result<Self, PacketCategoryDecodeError<Self::Opcode>>;
+}
+
 pub mod authentication {
+    use rmp::{decode::{ValueReadError, MarkerReadError}, Marker};
+    use rmpv::ValueRef;
+
+    use super::{PacketCategoryDecodeError, PacketDecoder};
+
     #[derive(Clone, Debug, PartialEq)]
     pub struct ClientAuthenticationPacket {
         pub opcode: ClientOpcode,
         pub payload: Option<ClientPacketPayload>,
     }
 
-    impl From<&[u8]> for ClientAuthenticationPacket {
-        fn from(value: &[u8]) -> Self {
-            todo!()
-        }
-    }
-    
-    impl Into<Vec<u8>> for ClientAuthenticationPacket {
-        fn into(self) -> Vec<u8> {
+    impl PacketDecoder for ClientAuthenticationPacket {
+        type Opcode = ClientOpcode;
+
+        fn decode_from(opcode: u16, mut payload: &[u8]) -> Result<Self, PacketCategoryDecodeError<Self::Opcode>> {
+            let opcode = ClientOpcode::try_from(opcode)
+                .map_err(|_| PacketCategoryDecodeError::UnknownOpcode { opcode })?;
+
+            // we use rmpv's abilities to easily read these
+            let ValueRef::Map(map) = rmpv::decode::read_value_ref(&mut payload)? else {
+                return Err(PacketCategoryDecodeError::InvalidPayload { opcode });
+            };
+
+            // todo: only decode the map on specific opcodes
+
+            match opcode {
+                ClientOpcode::SuccessResp => todo!(),
+                ClientOpcode::Login => {
+                    // we loop over the values, check needed ones and skip other fields
+                    //
+                    // this is to future-proof where maybe recent versions might have
+                    // some other fields
+                    for (key, val) in map {
+                        let ValueRef::String(key) = key else { continue };
+                        let Some(key) = key.into_str() else { continue };
+                        
+                        match key {
+                            "username" => todo!(),
+                            "password" => todo!(),
+                            _ => {},
+                        }
+                    }
+                },
+                ClientOpcode::LoginWithToken => todo!(),
+                ClientOpcode::Register => todo!(),
+                ClientOpcode::RegisterCheckEnabled => todo!(),
+                ClientOpcode::UsernameCheckExists => todo!(),
+                ClientOpcode::Logout => todo!(),
+            }
+
             todo!()
         }
     }
@@ -97,18 +248,6 @@ pub mod authentication {
     pub struct ServerAuthenticationPacket {
         pub opcode: ServerOpcode,
         pub payload: Option<ServerPacketPayload>,
-    }
-
-    impl From<&[u8]> for ServerAuthenticationPacket {
-        fn from(value: &[u8]) -> Self {
-            todo!()
-        }
-    }
-    
-    impl Into<Vec<u8>> for ServerAuthenticationPacket {
-        fn into(self) -> Vec<u8> {
-            todo!()
-        }
     }
 
     #[repr(u16)]
@@ -126,6 +265,31 @@ pub mod authentication {
         Logout = 0x00ff,
     }
 
+    impl Into<u16> for ClientOpcode {
+        fn into(self) -> u16 { self as u16 }
+    }
+    
+    // todo: make these to be generated automatically using macros
+    impl TryFrom<u16> for ClientOpcode {
+        type Error = ();
+
+        fn try_from(value: u16) -> Result<Self, Self::Error> {
+            Ok(match value {
+                0x00 => ClientOpcode::SuccessResp,
+
+                0x10 => ClientOpcode::Login,
+                0x11 => ClientOpcode::LoginWithToken,
+                0x20 => ClientOpcode::Register,
+                0x21 => ClientOpcode::RegisterCheckEnabled,
+
+                0xf0 => ClientOpcode::UsernameCheckExists,
+
+                0x00ff => ClientOpcode::Logout,
+                _ => Err(())?
+            })
+        }
+    }
+
     #[derive(Clone, Debug, PartialEq)]
     pub enum ClientPacketPayload {
         Login {
@@ -139,6 +303,36 @@ pub mod authentication {
             username: String,
             password: String
         },
+    }
+
+    pub enum DecodePayloadError {
+        InvalidPayload,
+        Msgpack(ValueReadError)
+    }
+
+    impl From<ValueReadError> for DecodePayloadError {
+        fn from(value: ValueReadError) -> Self { DecodePayloadError::Msgpack(value) }
+    }
+
+    impl From<MarkerReadError> for DecodePayloadError {
+        fn from(value: MarkerReadError) -> Self { DecodePayloadError::Msgpack(value.into()) }
+    }
+
+    impl ClientPacketPayload {
+        pub fn decode_payload(opcode: ClientOpcode, mut payload: &[u8]) -> Result<Option<ClientPacketPayload>, DecodePayloadError> {
+            Ok(Some(match opcode {
+                ClientOpcode::Login => {
+                    todo!()
+                },
+                ClientOpcode::LoginWithToken => {
+                    todo!()
+                },
+                ClientOpcode::Register => {
+                    todo!()
+                },
+                _ => return Ok(None)
+            }))
+        }
     }
 
     #[repr(u16)]
@@ -171,36 +365,11 @@ pub mod user {
         pub payload: Option<ClientPacketPayload>,
     }
 
-    impl From<&[u8]> for ClientUserPacket {
-        fn from(value: &[u8]) -> Self {
-            todo!()
-        }
-    }
-    
-    impl Into<Vec<u8>> for ClientUserPacket {
-        fn into(self) -> Vec<u8> {
-            todo!()
-        }
-    }
-
     #[derive(Clone, Debug, PartialEq)]
     pub struct ServerUserPacket {
         pub opcode: ServerOpcode,
         pub payload: Option<ServerPacketPayload>,
     }
-
-    impl From<&[u8]> for ServerUserPacket {
-        fn from(value: &[u8]) -> Self {
-            todo!()
-        }
-    }
-    
-    impl Into<Vec<u8>> for ServerUserPacket {
-        fn into(self) -> Vec<u8> {
-            todo!()
-        }
-    }
-
 
     #[repr(u16)]
     #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
@@ -276,35 +445,10 @@ pub mod editor {
         pub payload: Option<ClientPacketPayload>,
     }
 
-
-    impl From<&[u8]> for ClientEditorPacket {
-        fn from(value: &[u8]) -> Self {
-            todo!()
-        }
-    }
-    
-    impl Into<Vec<u8>> for ClientEditorPacket {
-        fn into(self) -> Vec<u8> {
-            todo!()
-        }
-    }
-
     #[derive(Clone, Debug, PartialEq)]
     pub struct ServerEditorPacket {
         pub opcode: ServerOpcode,
         pub payload: Option<ServerPacketPayload>,
-    }
-
-    impl From<&[u8]> for ServerEditorPacket {
-        fn from(value: &[u8]) -> Self {
-            todo!()
-        }
-    }
-    
-    impl Into<Vec<u8>> for ServerEditorPacket {
-        fn into(self) -> Vec<u8> {
-            todo!()
-        }
     }
 
     #[repr(u16)]
