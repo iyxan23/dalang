@@ -10,6 +10,9 @@ pub const VERSION_PATCH: u8 = 1;
 
 pub const EXTENSIONS: [&str; 0] = [];
 
+#[cfg(test)]
+mod tests;
+
 // maybe cache this in some way? I'm too lazy to use `lazy_static` (pun intended)
 pub fn protocol_version_packet() -> Result<Vec<u8>, ValueWriteError> {
     let mut buffer = Vec::new();
@@ -149,6 +152,7 @@ impl TryFrom<u16> for Category {
     }
 }
 
+#[derive(Debug)]
 pub enum PacketCategoryDecodeError<Opcode>
 where Opcode: Into<u16> + TryFrom<u16>
 {
@@ -190,9 +194,7 @@ where Self: Sized {
 }
 
 pub mod authentication {
-    use std::{ops::ControlFlow, convert};
-
-    use rmp::{decode::{ValueReadError, MarkerReadError}, Marker};
+    use rmp::decode::{ValueReadError, MarkerReadError};
     use rmpv::ValueRef;
 
     use super::{PacketCategoryDecodeError, PacketDecoder};
