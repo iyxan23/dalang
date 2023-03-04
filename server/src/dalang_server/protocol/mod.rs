@@ -1,6 +1,5 @@
-use std::io;
-
 use rmp::{encode::{ValueWriteError, write_array_len, write_u8, write_str_len, write_str}, decode::{read_marker, ValueReadError, MarkerReadError, read_u32, read_map_len}};
+use rmpv::ValueRef;
 
 pub const VERSION: &str = "0.0.1";
 
@@ -12,6 +11,12 @@ pub const EXTENSIONS: [&str; 0] = [];
 
 #[cfg(test)]
 mod tests;
+
+#[macro_use]
+mod error;
+
+pub use error::PacketCategoryDecodeError;
+pub use error::PacketDecodeError;
 
 // maybe cache this in some way? I'm too lazy to use `lazy_static` (pun intended)
 pub fn protocol_version_packet() -> Result<Vec<u8>, ValueWriteError> {
@@ -38,42 +43,6 @@ pub enum ClientPacket {
     Authentication(authentication::ClientAuthenticationPacket),
     User(user::ClientUserPacket),
     Editor(editor::ClientEditorPacket)
-}
-
-#[derive(Debug)]
-pub enum PacketDecodeError {
-    InvalidStructure,
-    UnknownOpcode { category: Category, opcode: u16 },
-    UnknownCategory { given_category: u16 },
-    InvalidPayload { category: Category, opcode: u16 },
-    Msgpack(ValueReadError),
-}
-
-impl From<ValueReadError> for PacketDecodeError {
-    fn from(value: ValueReadError) -> Self {
-        Self::Msgpack(value)
-    }
-}
-
-impl From<MarkerReadError> for PacketDecodeError {
-    fn from(value: MarkerReadError) -> Self {
-        Self::Msgpack(ValueReadError::InvalidMarkerRead(value.0))
-    }
-}
-
-impl<Opcode: Into<u16> + TryFrom<u16>> From<(Category, PacketCategoryDecodeError<Opcode>)> for PacketDecodeError {
-    fn from((category, value): (Category, PacketCategoryDecodeError<Opcode>)) -> Self {
-        match value {
-            PacketCategoryDecodeError::UnknownOpcode { opcode }
-                => PacketDecodeError::UnknownOpcode { category, opcode },
-
-            PacketCategoryDecodeError::InvalidPayload { opcode }
-                => PacketDecodeError::InvalidPayload { category, opcode: opcode.into() },
-            
-            PacketCategoryDecodeError::Msgpack(err)
-                => PacketDecodeError::Msgpack(err),
-        }
-    }
 }
 
 impl TryFrom<&[u8]> for ClientPacket {
@@ -152,40 +121,8 @@ impl TryFrom<u16> for Category {
     }
 }
 
-#[derive(Debug)]
-pub enum PacketCategoryDecodeError<Opcode>
-where Opcode: Into<u16> + TryFrom<u16>
-{
-    UnknownOpcode { opcode: u16 },
-    InvalidPayload { opcode: Opcode },
-    Msgpack(ValueReadError),
-}
-
-impl<Opcode> From<ValueReadError> for PacketCategoryDecodeError<Opcode>
-where Opcode: Into<u16> + TryFrom<u16>
-{
-    fn from(value: ValueReadError) -> Self {
-        PacketCategoryDecodeError::Msgpack(value)
-    }
-}
-
-impl<Opcode> From<rmpv::decode::Error> for PacketCategoryDecodeError<Opcode>
-where Opcode: Into<u16> + TryFrom<u16>
-{
-    fn from(value: rmpv::decode::Error) -> Self {
-        match value {
-            rmpv::decode::Error::InvalidMarkerRead(err)
-                => PacketCategoryDecodeError::Msgpack(ValueReadError::InvalidMarkerRead(err)),
-            rmpv::decode::Error::InvalidDataRead(err)
-                => PacketCategoryDecodeError::Msgpack(ValueReadError::InvalidDataRead(err)),
-            rmpv::decode::Error::DepthLimitExceeded
-                => PacketCategoryDecodeError::Msgpack(ValueReadError::InvalidDataRead(
-                    io::Error::new(value.kind(), value)
-                ))
-        }
-    }
-}
-
+// === Trait PacketDecoder
+// This trait should be implemented of all Packet structs.
 trait PacketDecoder
 where Self: Sized {
     type Opcode: Into<u16> + TryFrom<u16>;
@@ -193,11 +130,49 @@ where Self: Sized {
     fn decode_from(opcode: u16, payload: &[u8]) -> Result<Self, PacketCategoryDecodeError<Self::Opcode>>;
 }
 
+// use rmpv to decode the payload to a map
+/// Decode a payload into a [`Vec<(ValueRef, ValueRef)>`], otherwise return an `Err`.
+pub(crate) fn decode_payload<ClientOpcode>(mut payload: &[u8], opcode: ClientOpcode)
+    -> Result<Vec<(ValueRef, ValueRef)>, PacketCategoryDecodeError<ClientOpcode>>
+where
+    ClientOpcode: Into<u16> + TryFrom<u16>
+{
+
+    Ok(match rmpv::decode::read_value_ref(&mut payload)? {
+        ValueRef::Map(map) => map,
+        _ => yeet_invalid_payload!(opcode),
+    })
+}
+
+/// Get a [`&str`] from a [`ValueRef`], otherwise return an `Err`.
+pub(crate) fn get_str<'a, ClientOpcode>(val: ValueRef<'a>, opcode: ClientOpcode)
+    -> Result<&'a str, PacketCategoryDecodeError<ClientOpcode>>
+where
+    ClientOpcode: Into<u16> + TryFrom<u16>
+{
+    let ValueRef::String(val) = val else { yeet_invalid_payload!(opcode) };
+    let Some(val) = val.into_str() else { yeet_invalid_payload!(opcode) };
+
+    Ok(val)
+}
+
+// +===========================+
+// |     Packet Categories     |
+// +===========================+
+//
+// These modules includes opcodes of each categories, both for the server and client.
+//
+// There are three categories as defined in the `Category` enum:
+// - Authentication: 0x1
+// - User: 0x2
+// - Editor: 0x3
+
+// >> Authentication Packet Category
 pub mod authentication {
     use rmp::decode::{ValueReadError, MarkerReadError};
     use rmpv::ValueRef;
 
-    use super::{PacketCategoryDecodeError, PacketDecoder};
+    use super::{PacketCategoryDecodeError, PacketDecoder, decode_payload, get_str};
 
     #[derive(Clone, Debug, PartialEq)]
     pub struct ClientAuthenticationPacket {
@@ -211,29 +186,6 @@ pub mod authentication {
         fn decode_from(opcode: u16, payload: &[u8]) -> Result<Self, PacketCategoryDecodeError<Self::Opcode>> {
             let opcode = ClientOpcode::try_from(opcode)
                 .map_err(|_| PacketCategoryDecodeError::UnknownOpcode { opcode })?;
-
-            macro_rules! thr_invalid_payload {
-                ($opcode:ident) => { return Err(PacketCategoryDecodeError::InvalidPayload { opcode: $opcode }); };
-            }
-
-            // use rmpv to decode the payload to a map
-            fn decode_payload(mut payload: &[u8], opcode: ClientOpcode)
-                -> Result<Vec<(ValueRef, ValueRef)>, PacketCategoryDecodeError<ClientOpcode>> {
-
-                Ok(match rmpv::decode::read_value_ref(&mut payload)? {
-                    ValueRef::Map(map) => map,
-                    _ => thr_invalid_payload!(opcode),
-                })
-            }
-
-            fn get_str<'a>(val: ValueRef<'a>, opcode: ClientOpcode)
-                -> Result<&'a str, PacketCategoryDecodeError<ClientOpcode>> {
-
-                let ValueRef::String(val) = val else { thr_invalid_payload!(opcode) };
-                let Some(val) = val.into_str() else { thr_invalid_payload!(opcode) };
-
-                Ok(val)
-            }
 
             Ok(ClientAuthenticationPacket {
                 opcode,
@@ -264,7 +216,7 @@ pub mod authentication {
                                         _ => acc,
                                     })
                                 })? else {
-                                    thr_invalid_payload!(opcode)
+                                    yeet_invalid_payload!(opcode)
                                 };
 
                         Some(ClientPacketPayload::Login {
@@ -395,6 +347,7 @@ pub mod authentication {
     }
 }
 
+// >> User Packet Category
 pub mod user {
     #[derive(Clone, Debug, PartialEq)]
     pub struct ClientUserPacket {
@@ -475,6 +428,7 @@ pub mod user {
     }
 }
 
+// >> Editor Packet Category
 pub mod editor {
     #[derive(Clone, Debug, PartialEq)]
     pub struct ClientEditorPacket {
