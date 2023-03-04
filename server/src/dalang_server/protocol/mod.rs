@@ -243,54 +243,32 @@ pub mod authentication {
                         //
                         // this is to future-proof where maybe recent versions might have
                         // some other fields
-                        let deez =
+                        let (Some(username), Some(password)) =
                             payload
                                 .into_iter()
                                 .filter_map(|(key, val)| {
                                     let ValueRef::String(key) = key else { None? };
                                     key.into_str().map(|s| (s, val))
                                 })
-                                .try_fold(
-                                    Ok::<(Option<_>, Option<_>),
-                                        PacketCategoryDecodeError<ClientOpcode>>((None, None)),
-                                        |acc, (key, val)| {
+                                .try_fold::<_, _, Result<_, PacketCategoryDecodeError<ClientOpcode>>>(
+                                    (None, None),
+                                    |acc @ (username, password),
+                                     (key, val)| {
 
-                                    // stop early when it has err
-                                    if acc.is_err() { return ControlFlow::Break(acc) }
+                                    Ok(match key {
+                                        "username" => (Some(get_str(val, opcode)?), password),
+                                        "password" => (username, Some(get_str(val, opcode)?)),
 
-                                    // stop early when both are Some
-                                    if let Ok((Some(_), Some(_))) = acc { return ControlFlow::Break(acc) }
+                                        _ => acc,
+                                    })
+                                })? else {
+                                    thr_invalid_payload!(opcode)
+                                };
 
-                                    match key {
-                                        "username" => {
-                                            ControlFlow::Continue(
-                                                acc.map(|(_, password)|
-                                                    Ok((Some(get_str(val, opcode)?), password))
-                                                ).and_then(convert::identity) // .flatten()
-                                            )
-                                        }
-
-                                        "password" => {
-                                            ControlFlow::Continue(
-                                                acc.map(|(username, _)|
-                                                    Ok((username, Some(get_str(val, opcode)?)))
-                                                ).and_then(convert::identity) // .flatten()
-                                            )
-                                        }
-
-                                        _ => ControlFlow::Continue(acc)
-                                    }
-                                });
-
-                        // let (Some(username), Some(password)) = (username, password) else {
-                        //     thr_invalid_payload!(opcode)
-                        // };
-
-                        // Some(ClientPacketPayload::Login {
-                        //     username: username.to_owned(),
-                        //     password: password.to_owned()
-                        // })
-                        todo!("what is this")
+                        Some(ClientPacketPayload::Login {
+                            username: username.to_owned(),
+                            password: password.to_owned()
+                        })
                     },
 
                     ClientOpcode::LoginWithToken => todo!(),
