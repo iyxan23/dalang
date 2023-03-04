@@ -1,4 +1,4 @@
-use std::{any::Provider, io};
+use std::io;
 
 use rmp::{encode::{ValueWriteError, write_array_len, write_u8, write_str_len, write_str}, decode::{read_marker, ValueReadError, MarkerReadError, read_u32, read_map_len}};
 
@@ -190,6 +190,8 @@ where Self: Sized {
 }
 
 pub mod authentication {
+    use std::{ops::ControlFlow, convert};
+
     use rmp::{decode::{ValueReadError, MarkerReadError}, Marker};
     use rmpv::ValueRef;
 
@@ -204,43 +206,98 @@ pub mod authentication {
     impl PacketDecoder for ClientAuthenticationPacket {
         type Opcode = ClientOpcode;
 
-        fn decode_from(opcode: u16, mut payload: &[u8]) -> Result<Self, PacketCategoryDecodeError<Self::Opcode>> {
+        fn decode_from(opcode: u16, payload: &[u8]) -> Result<Self, PacketCategoryDecodeError<Self::Opcode>> {
             let opcode = ClientOpcode::try_from(opcode)
                 .map_err(|_| PacketCategoryDecodeError::UnknownOpcode { opcode })?;
 
-            // we use rmpv's abilities to easily read these
-            let ValueRef::Map(map) = rmpv::decode::read_value_ref(&mut payload)? else {
-                return Err(PacketCategoryDecodeError::InvalidPayload { opcode });
-            };
-
-            // todo: only decode the map on specific opcodes
-
-            match opcode {
-                ClientOpcode::SuccessResp => todo!(),
-                ClientOpcode::Login => {
-                    // we loop over the values, check needed ones and skip other fields
-                    //
-                    // this is to future-proof where maybe recent versions might have
-                    // some other fields
-                    for (key, val) in map {
-                        let ValueRef::String(key) = key else { continue };
-                        let Some(key) = key.into_str() else { continue };
-                        
-                        match key {
-                            "username" => todo!(),
-                            "password" => todo!(),
-                            _ => {},
-                        }
-                    }
-                },
-                ClientOpcode::LoginWithToken => todo!(),
-                ClientOpcode::Register => todo!(),
-                ClientOpcode::RegisterCheckEnabled => todo!(),
-                ClientOpcode::UsernameCheckExists => todo!(),
-                ClientOpcode::Logout => todo!(),
+            macro_rules! thr_invalid_payload {
+                ($opcode:ident) => { return Err(PacketCategoryDecodeError::InvalidPayload { opcode: $opcode }); };
             }
 
-            todo!()
+            // use rmpv to decode the payload to a map
+            fn decode_payload(mut payload: &[u8], opcode: ClientOpcode)
+                -> Result<Vec<(ValueRef, ValueRef)>, PacketCategoryDecodeError<ClientOpcode>> {
+
+                Ok(match rmpv::decode::read_value_ref(&mut payload)? {
+                    ValueRef::Map(map) => map,
+                    _ => thr_invalid_payload!(opcode),
+                })
+            }
+
+            fn get_str<'a>(val: ValueRef<'a>, opcode: ClientOpcode)
+                -> Result<&'a str, PacketCategoryDecodeError<ClientOpcode>> {
+
+                let ValueRef::String(val) = val else { thr_invalid_payload!(opcode) };
+                let Some(val) = val.into_str() else { thr_invalid_payload!(opcode) };
+
+                Ok(val)
+            }
+
+            Ok(ClientAuthenticationPacket {
+                opcode,
+                payload: match opcode {
+                    ClientOpcode::Login => {
+                        let payload = decode_payload(&payload, opcode)?;
+
+                        // we loop over the values, check needed ones and skip other fields
+                        //
+                        // this is to future-proof where maybe recent versions might have
+                        // some other fields
+                        let deez =
+                            payload
+                                .into_iter()
+                                .filter_map(|(key, val)| {
+                                    let ValueRef::String(key) = key else { None? };
+                                    key.into_str().map(|s| (s, val))
+                                })
+                                .try_fold(
+                                    Ok::<(Option<_>, Option<_>),
+                                        PacketCategoryDecodeError<ClientOpcode>>((None, None)),
+                                        |acc, (key, val)| {
+
+                                    // stop early when it has err
+                                    if acc.is_err() { return ControlFlow::Break(acc) }
+
+                                    // stop early when both are Some
+                                    if let Ok((Some(_), Some(_))) = acc { return ControlFlow::Break(acc) }
+
+                                    match key {
+                                        "username" => {
+                                            ControlFlow::Continue(
+                                                acc.map(|(_, password)|
+                                                    Ok((Some(get_str(val, opcode)?), password))
+                                                ).and_then(convert::identity) // .flatten()
+                                            )
+                                        }
+
+                                        "password" => {
+                                            ControlFlow::Continue(
+                                                acc.map(|(username, _)|
+                                                    Ok((username, Some(get_str(val, opcode)?)))
+                                                ).and_then(convert::identity) // .flatten()
+                                            )
+                                        }
+
+                                        _ => ControlFlow::Continue(acc)
+                                    }
+                                });
+
+                        // let (Some(username), Some(password)) = (username, password) else {
+                        //     thr_invalid_payload!(opcode)
+                        // };
+
+                        // Some(ClientPacketPayload::Login {
+                        //     username: username.to_owned(),
+                        //     password: password.to_owned()
+                        // })
+                        todo!("what is this")
+                    },
+
+                    ClientOpcode::LoginWithToken => todo!(),
+                    ClientOpcode::Register => todo!(),
+                    _ => None,
+                }
+            })
         }
     }
 
