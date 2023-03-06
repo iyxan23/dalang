@@ -4,11 +4,6 @@ use rmp::decode::{ValueReadError, MarkerReadError};
 
 use super::Category;
 
-// for easier throwing
-macro_rules! yeet_invalid_payload {
-    ($opcode:ident) => { return Err(PacketCategoryDecodeError::InvalidPayload { opcode: $opcode }) };
-}
-
 // ==== Packet Decode Error
 #[derive(Debug)]
 pub enum PacketDecodeError {

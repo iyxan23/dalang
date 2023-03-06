@@ -123,7 +123,7 @@ impl TryFrom<u16> for Category {
 }
 
 // === Trait PacketDecoder
-// This trait should be implemented of all Packet structs.
+// This trait should be implemented of all packet structs.
 trait PacketDecoder
 where Self: Sized {
     type Opcode: Into<u16> + TryFrom<u16>;
@@ -131,24 +131,13 @@ where Self: Sized {
     fn decode_from(opcode: u16, payload: &[u8]) -> Result<Self, PacketCategoryDecodeError<Self::Opcode>>;
 }
 
-// use rmpv to decode the payload to a map
-/// Decode a payload into a [`Vec<(ValueRef, ValueRef)>`], otherwise return an `Err`.
-pub(crate) fn decode_payload(mut payload: &[u8]) -> Option<Vec<(ValueRef, ValueRef)>> {
-    rmpv::decode::read_value_ref(&mut payload)
-        .ok()
-        .map(|v| match v {
-            ValueRef::Map(map) => Some(map),
-            _ => None,
-        })
-        .flatten()
-}
+// === Trait PayloadDecoder
+// This trait should be implemented for payload packet structs.
+trait PayloadDecoder
+where Self: Sized {
+    type Opcode: Into<u16> + TryFrom<u16>;
 
-/// Try to get a [`&str`] from a [`ValueRef`], otherwise return `None`.
-pub(crate) fn get_str<'a>(val: ValueRef<'a>) -> Option<&'a str> {
-    let ValueRef::String(val) = val else { None? };
-    let Some(val) = val.into_str() else { None? };
-
-    Some(val)
+    fn decode_payload(opcode: Self::Opcode, payload: &[u8]) -> Result<Option<Self>, PayloadDecodeError>;
 }
 
 // +===========================+
@@ -166,7 +155,7 @@ pub(crate) fn get_str<'a>(val: ValueRef<'a>) -> Option<&'a str> {
 pub mod authentication {
     use rmpv::ValueRef;
 
-    use super::{PacketCategoryDecodeError, PacketDecoder, PayloadDecodeError, decode_payload, get_str};
+    use super::{PacketCategoryDecodeError, PacketDecoder, PayloadDecodeError, decode_payload, get_str, PayloadDecoder};
 
     #[derive(Clone, Debug, PartialEq)]
     pub struct ClientAuthenticationPacket {
@@ -250,8 +239,10 @@ pub mod authentication {
         },
     }
 
-    impl ClientPacketPayload {
-        pub fn decode_payload(opcode: ClientOpcode, payload: &[u8]) -> Result<Option<Self>, PayloadDecodeError> {
+    impl PayloadDecoder for ClientPacketPayload {
+        type Opcode = ClientOpcode;
+
+        fn decode_payload(opcode: Self::Opcode, payload: &[u8]) -> Result<Option<Self>, PayloadDecodeError> {
             Ok(Some(match opcode {
                 ClientOpcode::Login => {
                     let payload = decode_payload(&payload)
@@ -435,3 +426,27 @@ pub mod editor {
     pub enum ServerPacketPayload {
     }
 }
+
+// ======== Utilities ========
+
+// use rmpv to decode the payload to a map
+/// Decode a payload into a [`Vec<(ValueRef, ValueRef)>`], otherwise return an `Err`.
+pub(crate) fn decode_payload(mut payload: &[u8]) -> Option<Vec<(ValueRef, ValueRef)>> {
+    rmpv::decode::read_value_ref(&mut payload)
+        .ok()
+        .map(|v| match v {
+            ValueRef::Map(map) => Some(map),
+            _ => None,
+        })
+        .flatten()
+}
+
+/// Try to get a [`&str`] from a [`ValueRef`], otherwise return `None`.
+pub(crate) fn get_str<'a>(val: ValueRef<'a>) -> Option<&'a str> {
+    let ValueRef::String(val) = val else { None? };
+    let Some(val) = val.into_str() else { None? };
+
+    Some(val)
+}
+
+// ======== /Utilities ========
