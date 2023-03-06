@@ -140,6 +140,46 @@ where Self: Sized {
     fn decode_payload(opcode: Self::Opcode, payload: &[u8]) -> Result<Option<Self>, PayloadDecodeError>;
 }
 
+macro_rules! decode_payload {
+    { $payload:ident; $typ:ty { $($str_names:expr => $names:ident),* $(,)? } } => {
+        let payload = decode_payload($payload)
+            .ok_or(PayloadDecodeError::InvalidPayload)?;
+
+        // we loop over the values, check needed ones and skip other fields
+        //
+        // this is to future-proof where maybe recent versions might have
+        // some other fields
+        let mut map =
+            payload
+                .into_iter()
+                .filter_map(|(key, val)| {
+                    let ValueRef::String(key) = key else { None? };
+                    key.into_str().map(|s| (s, val))
+                })
+                .try_fold::<_, _, Result<_, PayloadDecodeError>>(
+                    HashMap::new(),
+                    |mut acc, (key, val)| {
+
+                    match key {
+                        $(
+                            $str_names => {
+                                acc.insert($str_names, get_str(val).ok_or(PayloadDecodeError::InvalidPayload)?);
+                            }
+                        )*
+                        _ => {},
+                    }
+
+                    Ok(acc)
+                })?;
+
+        $ty {
+            $(
+                $names: map.remove($str_names).ok_or(PayloadDecodeError::InvalidPayload)?.to_owned(),
+            )*
+        }
+    };
+}
+
 // +===========================+
 // |     Packet Categories     |
 // +===========================+
@@ -247,47 +287,27 @@ pub mod authentication {
         fn decode_payload(opcode: Self::Opcode, payload: &[u8]) -> Result<Option<Self>, PayloadDecodeError> {
             Ok(Some(match opcode {
                 ClientOpcode::Login => {
-                    let payload = decode_payload(&payload)
-                        .ok_or(PayloadDecodeError::InvalidPayload)?;
-
-                    // we loop over the values, check needed ones and skip other fields
-                    //
-                    // this is to future-proof where maybe recent versions might have
-                    // some other fields
-                    let mut map =
-                        payload
-                            .into_iter()
-                            .filter_map(|(key, val)| {
-                                let ValueRef::String(key) = key else { None? };
-                                key.into_str().map(|s| (s, val))
-                            })
-                            .try_fold::<_, _, Result<_, PayloadDecodeError>>(
-                                HashMap::new(),
-                                |mut acc, (key, val)| {
-
-                                match key {
-                                    "username" => {
-                                        acc.insert("username", get_str(val).ok_or(PayloadDecodeError::InvalidPayload)?);
-                                    },
-                                    "password" => {
-                                        acc.insert("password", get_str(val).ok_or(PayloadDecodeError::InvalidPayload)?);
-                                    },
-                                    _ => {},
-                                }
-
-                                Ok(acc)
-                            })?;
-
-                    Self::Login {
-                        username: map.remove("username").ok_or(PayloadDecodeError::InvalidPayload)?.to_owned(),
-                        password: map.remove("password").ok_or(PayloadDecodeError::InvalidPayload)?.to_owned(),
+                    decode_payload! { payload;
+                        Self::Login {
+                            "username" => username,
+                            "password" => password,
+                        }
                     }
                 },
                 ClientOpcode::LoginWithToken => {
-                    todo!()
+                    decode_payload! { payload;
+                        Self::LoginWithToken {
+                            "token" => token
+                        }
+                    }
                 },
                 ClientOpcode::Register => {
-                    todo!()
+                    decode_payload! { payload;
+                        Self::Register {
+                            "username" => username,
+                            "password" => password,
+                        }
+                    }
                 },
                 _ => return Ok(None)
             }))
