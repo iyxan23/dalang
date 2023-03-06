@@ -1,4 +1,4 @@
-use rmp::{encode::{ValueWriteError, write_array_len, write_u8, write_str_len, write_str}, decode::{read_marker, ValueReadError, MarkerReadError, read_u32, read_map_len}};
+use rmp::{encode::{ValueWriteError, write_array_len, write_u8, write_str_len, write_str}, decode::{read_marker, read_u32}};
 use rmpv::ValueRef;
 
 pub const VERSION: &str = "0.0.1";
@@ -17,6 +17,7 @@ mod error;
 
 pub use error::PacketCategoryDecodeError;
 pub use error::PacketDecodeError;
+pub use error::PayloadDecodeError;
 
 // maybe cache this in some way? I'm too lazy to use `lazy_static` (pun intended)
 pub fn protocol_version_packet() -> Result<Vec<u8>, ValueWriteError> {
@@ -132,28 +133,22 @@ where Self: Sized {
 
 // use rmpv to decode the payload to a map
 /// Decode a payload into a [`Vec<(ValueRef, ValueRef)>`], otherwise return an `Err`.
-pub(crate) fn decode_payload<ClientOpcode>(mut payload: &[u8], opcode: ClientOpcode)
-    -> Result<Vec<(ValueRef, ValueRef)>, PacketCategoryDecodeError<ClientOpcode>>
-where
-    ClientOpcode: Into<u16> + TryFrom<u16>
-{
-
-    Ok(match rmpv::decode::read_value_ref(&mut payload)? {
-        ValueRef::Map(map) => map,
-        _ => yeet_invalid_payload!(opcode),
-    })
+pub(crate) fn decode_payload(mut payload: &[u8]) -> Option<Vec<(ValueRef, ValueRef)>> {
+    rmpv::decode::read_value_ref(&mut payload)
+        .ok()
+        .map(|v| match v {
+            ValueRef::Map(map) => Some(map),
+            _ => None,
+        })
+        .flatten()
 }
 
-/// Get a [`&str`] from a [`ValueRef`], otherwise return an `Err`.
-pub(crate) fn get_str<'a, ClientOpcode>(val: ValueRef<'a>, opcode: ClientOpcode)
-    -> Result<&'a str, PacketCategoryDecodeError<ClientOpcode>>
-where
-    ClientOpcode: Into<u16> + TryFrom<u16>
-{
-    let ValueRef::String(val) = val else { yeet_invalid_payload!(opcode) };
-    let Some(val) = val.into_str() else { yeet_invalid_payload!(opcode) };
+/// Try to get a [`&str`] from a [`ValueRef`], otherwise return `None`.
+pub(crate) fn get_str<'a>(val: ValueRef<'a>) -> Option<&'a str> {
+    let ValueRef::String(val) = val else { None? };
+    let Some(val) = val.into_str() else { None? };
 
-    Ok(val)
+    Some(val)
 }
 
 // +===========================+
@@ -169,10 +164,9 @@ where
 
 // >> Authentication Packet Category
 pub mod authentication {
-    use rmp::decode::{ValueReadError, MarkerReadError};
     use rmpv::ValueRef;
 
-    use super::{PacketCategoryDecodeError, PacketDecoder, decode_payload, get_str};
+    use super::{PacketCategoryDecodeError, PacketDecoder, PayloadDecodeError, decode_payload, get_str};
 
     #[derive(Clone, Debug, PartialEq)]
     pub struct ClientAuthenticationPacket {
@@ -189,46 +183,8 @@ pub mod authentication {
 
             Ok(ClientAuthenticationPacket {
                 opcode,
-                payload: match opcode {
-                    ClientOpcode::Login => {
-                        let payload = decode_payload(&payload, opcode)?;
-
-                        // we loop over the values, check needed ones and skip other fields
-                        //
-                        // this is to future-proof where maybe recent versions might have
-                        // some other fields
-                        let (Some(username), Some(password)) =
-                            payload
-                                .into_iter()
-                                .filter_map(|(key, val)| {
-                                    let ValueRef::String(key) = key else { None? };
-                                    key.into_str().map(|s| (s, val))
-                                })
-                                .try_fold::<_, _, Result<_, PacketCategoryDecodeError<ClientOpcode>>>(
-                                    (None, None),
-                                    |acc @ (username, password),
-                                     (key, val)| {
-
-                                    Ok(match key {
-                                        "username" => (Some(get_str(val, opcode)?), password),
-                                        "password" => (username, Some(get_str(val, opcode)?)),
-
-                                        _ => acc,
-                                    })
-                                })? else {
-                                    yeet_invalid_payload!(opcode)
-                                };
-
-                        Some(ClientPacketPayload::Login {
-                            username: username.to_owned(),
-                            password: password.to_owned()
-                        })
-                    },
-
-                    ClientOpcode::LoginWithToken => todo!(),
-                    ClientOpcode::Register => todo!(),
-                    _ => None,
-                }
+                payload: ClientPacketPayload::decode_payload(opcode, payload)
+                    .map_err(|err| (opcode, err))?
             })
         }
     }
@@ -294,24 +250,41 @@ pub mod authentication {
         },
     }
 
-    pub enum DecodePayloadError {
-        InvalidPayload,
-        Msgpack(ValueReadError)
-    }
-
-    impl From<ValueReadError> for DecodePayloadError {
-        fn from(value: ValueReadError) -> Self { DecodePayloadError::Msgpack(value) }
-    }
-
-    impl From<MarkerReadError> for DecodePayloadError {
-        fn from(value: MarkerReadError) -> Self { DecodePayloadError::Msgpack(value.into()) }
-    }
-
     impl ClientPacketPayload {
-        pub fn decode_payload(opcode: ClientOpcode, mut payload: &[u8]) -> Result<Option<ClientPacketPayload>, DecodePayloadError> {
+        pub fn decode_payload(opcode: ClientOpcode, payload: &[u8]) -> Result<Option<Self>, PayloadDecodeError> {
             Ok(Some(match opcode {
                 ClientOpcode::Login => {
-                    todo!()
+                    let payload = decode_payload(&payload)
+                        .ok_or(PayloadDecodeError::InvalidPayload)?;
+
+                    // we loop over the values, check needed ones and skip other fields
+                    //
+                    // this is to future-proof where maybe recent versions might have
+                    // some other fields
+                    let (Some(username), Some(password)) =
+                        payload
+                            .into_iter()
+                            .filter_map(|(key, val)| {
+                                let ValueRef::String(key) = key else { None? };
+                                key.into_str().map(|s| (s, val))
+                            })
+                            .try_fold::<_, _, Result<_, PayloadDecodeError>>(
+                                (None, None),
+                                |acc @ (username, password),
+                                    (key, val)| {
+
+                                Ok(match key {
+                                    "username" => (Some(get_str(val).ok_or(PayloadDecodeError::InvalidPayload)?), password),
+                                    "password" => (username, Some(get_str(val).ok_or(PayloadDecodeError::InvalidPayload)?)),
+
+                                    _ => acc,
+                                })
+                            })? else { return Err(PayloadDecodeError::InvalidPayload) };
+
+                    Self::Login {
+                        username: username.to_owned(),
+                        password: password.to_owned()
+                    }
                 },
                 ClientOpcode::LoginWithToken => {
                     todo!()
