@@ -153,6 +153,8 @@ where Self: Sized {
 
 // >> Authentication Packet Category
 pub mod authentication {
+    use std::collections::HashMap;
+
     use rmpv::ValueRef;
 
     use super::{PacketCategoryDecodeError, PacketDecoder, PayloadDecodeError, decode_payload, get_str, PayloadDecoder};
@@ -252,7 +254,7 @@ pub mod authentication {
                     //
                     // this is to future-proof where maybe recent versions might have
                     // some other fields
-                    let (Some(username), Some(password)) =
+                    let mut map =
                         payload
                             .into_iter()
                             .filter_map(|(key, val)| {
@@ -260,21 +262,25 @@ pub mod authentication {
                                 key.into_str().map(|s| (s, val))
                             })
                             .try_fold::<_, _, Result<_, PayloadDecodeError>>(
-                                (None, None),
-                                |acc @ (username, password),
-                                    (key, val)| {
+                                HashMap::new(),
+                                |mut acc, (key, val)| {
 
-                                Ok(match key {
-                                    "username" => (Some(get_str(val).ok_or(PayloadDecodeError::InvalidPayload)?), password),
-                                    "password" => (username, Some(get_str(val).ok_or(PayloadDecodeError::InvalidPayload)?)),
+                                match key {
+                                    "username" => {
+                                        acc.insert("username", get_str(val).ok_or(PayloadDecodeError::InvalidPayload)?);
+                                    },
+                                    "password" => {
+                                        acc.insert("password", get_str(val).ok_or(PayloadDecodeError::InvalidPayload)?);
+                                    },
+                                    _ => {},
+                                }
 
-                                    _ => acc,
-                                })
-                            })? else { return Err(PayloadDecodeError::InvalidPayload) };
+                                Ok(acc)
+                            })?;
 
                     Self::Login {
-                        username: username.to_owned(),
-                        password: password.to_owned()
+                        username: map.remove("username").ok_or(PayloadDecodeError::InvalidPayload)?.to_owned(),
+                        password: map.remove("password").ok_or(PayloadDecodeError::InvalidPayload)?.to_owned(),
                     }
                 },
                 ClientOpcode::LoginWithToken => {
