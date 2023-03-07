@@ -172,7 +172,7 @@ macro_rules! decode_payload {
                     Ok(acc)
                 })?;
 
-        $ty {
+        $typ {
             $(
                 $names: map.remove($str_names).ok_or(PayloadDecodeError::InvalidPayload)?.to_owned(),
             )*
