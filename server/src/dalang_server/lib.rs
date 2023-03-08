@@ -15,7 +15,7 @@ async fn ws_endpoint<AuthActor: auth::Authenticator>(
     req: HttpRequest,
     stream: web::Payload
 ) -> Result<HttpResponse, Error> {
-    let Some(server) = req.app_data::<ServerState<AuthActor>>() else {
+    let Some(server) = req.app_data::<web::Data<ServerState<AuthActor>>>() else {
         return HttpResponse::InternalServerError().await;
     };
 
