@@ -1,7 +1,7 @@
 use actix::{Actor, StreamHandler, Handler, Addr};
 use actix_web_actors::ws;
 
-use crate::{server::DalangServer, auth, protocol};
+use crate::{server::DalangServer, auth};
 
 /// Represents a WebSocket session
 pub struct Session<AuthActor: auth::Authenticator> {
@@ -14,7 +14,9 @@ impl<A: auth::Authenticator> Actor for Session<A> {
     type Context = ws::WebsocketContext<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
-        let Ok(payload) = protocol::protocol_version_packet() else {
+        println!("[id:{}] client connected! sending protocol information", self.id);
+
+        let Ok(payload) = dalang_protocol::protocol_version_packet() else {
             println!("[id:{}] failed to run protocol_version_packet(), closing with error", self.id);
 
             // close when we failed to generate the protocol version packet

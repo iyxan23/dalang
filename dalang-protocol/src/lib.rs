@@ -1,7 +1,9 @@
 use rmp::{encode::{ValueWriteError, write_array_len, write_u8, write_str_len, write_str}, decode::{read_marker, read_u32}};
 use rmpv::ValueRef;
 
-pub const VERSION: &str = "0.0.1";
+// might be a good idea to use the version specified on the cargo manifest file
+// but it'd be a problem converting it into these MAJOR, MINOR, and PATCH vars
+pub const VERSION: &'static str = "0.0.1";
 
 pub const VERSION_MAJOR: u8 = 0;
 pub const VERSION_MINOR: u8 = 0;
@@ -20,6 +22,8 @@ pub use error::PacketDecodeError;
 pub use error::PayloadDecodeError;
 
 // maybe cache this in some way? I'm too lazy to use `lazy_static` (pun intended)
+/// Generates a packet that contains the version information of the protocol
+/// used at the start of handshake between the server and the client.
 pub fn protocol_version_packet() -> Result<Vec<u8>, ValueWriteError> {
     let mut buffer = Vec::new();
 
@@ -141,7 +145,11 @@ where Self: Sized {
 }
 
 macro_rules! decode_payload {
-    { $payload:ident; $typ:ty { $($str_names:expr => $names:ident),* $(,)? } } => {
+    { $payload:ident; $typ:path => { $($str_names:expr => $names:ident),* $(,)? } } => {
+        use crate::{decode_payload, get_str};
+        use rmpv::ValueRef;
+        use std::collections::HashMap;
+
         let payload = decode_payload($payload)
             .ok_or(PayloadDecodeError::InvalidPayload)?;
 
@@ -193,11 +201,7 @@ macro_rules! decode_payload {
 
 // >> Authentication Packet Category
 pub mod authentication {
-    use std::collections::HashMap;
-
-    use rmpv::ValueRef;
-
-    use super::{PacketCategoryDecodeError, PacketDecoder, PayloadDecodeError, decode_payload, get_str, PayloadDecoder};
+    use super::{PacketCategoryDecodeError, PacketDecoder, PayloadDecodeError, PayloadDecoder};
 
     #[derive(Clone, Debug, PartialEq)]
     pub struct ClientAuthenticationPacket {
@@ -288,7 +292,7 @@ pub mod authentication {
             Ok(Some(match opcode {
                 ClientOpcode::Login => {
                     decode_payload! { payload;
-                        Self::Login {
+                        Self::Login => {
                             "username" => username,
                             "password" => password,
                         }
@@ -296,14 +300,14 @@ pub mod authentication {
                 },
                 ClientOpcode::LoginWithToken => {
                     decode_payload! { payload;
-                        Self::LoginWithToken {
+                        Self::LoginWithToken => {
                             "token" => token
                         }
                     }
                 },
                 ClientOpcode::Register => {
                     decode_payload! { payload;
-                        Self::Register {
+                        Self::Register => {
                             "username" => username,
                             "password" => password,
                         }

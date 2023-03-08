@@ -8,7 +8,6 @@ use server::DalangServer;
 mod auth;
 mod session;
 mod storage;
-mod protocol;
 
 pub mod components;
 
