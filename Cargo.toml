@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "dalang-protocol",
+    "protocol-derive",
     "server"
 ]
 

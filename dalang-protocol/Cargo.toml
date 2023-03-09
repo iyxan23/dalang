@@ -8,3 +8,5 @@ edition = "2021"
 [dependencies]
 rmp = "^0.8.2"
 rmpv = "^1.0.0"
+
+protocol-derive = { path = "../protocol-derive" }
