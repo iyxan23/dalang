@@ -1,6 +1,6 @@
 use proc_macro::{TokenStream};
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput, Data, TypePath, LitStr};
+use syn::{parse_macro_input, DeriveInput, Data, TypePath, LitStr, Token, punctuated::Punctuated};
 
 #[proc_macro_derive(Packet)]
 pub fn derive(input: TokenStream) -> TokenStream {
@@ -30,6 +30,25 @@ pub fn derive(input: TokenStream) -> TokenStream {
         packets.push((variant, opcode));
     }
 
+    let decode_payload = quote! {
+        rmpv::decode::read_value_ref(&mut payload)
+            .ok()
+            .map(|v| match v {
+                ValueRef::Map(map) => Some(map),
+                _ => None,
+            })
+            .flatten()?
+    };
+
+    let get_str = quote! {
+        {
+            let ValueRef::String(val) = val else { None? };
+            let Some(val) = val.into_str() else { None? };
+
+            val.to_owned()
+        }
+    };
+
     // let's imagine we have an enum error type
     // enum Error {
     //             
@@ -48,42 +67,12 @@ pub fn derive(input: TokenStream) -> TokenStream {
         .map(|(variant, int)| {
             // fn (opcode: u16, payload: &[u8])
             // from the opcode, given, we turn the payload to construct the variant
-            let name = variant.ident;
+            let variant_name = variant.ident;
 
             let (map_decoding, variant_construction) = match variant.fields {
                 syn::Fields::Named(fields) => {
-                    let map_decoding = quote! {
-                        use std::collections::Hashmap;
-                        use rmpv::ValueRef;
-
-                        // todo: decode_payload
-                        let payload = decode_payload(&payload)?;
-
-                        let mut map =
-                            payload
-                                .into_iter()
-                                .filter_map(|(key, val)| {
-                                    let ValueRef::String(key) = key else { None? };
-                                    key.into_str().map(|s| (s, val))
-                                })
-                                .try_fold::<_, _, Result<_, PayloadDecodeError>>(
-                                    HashMap::new(),
-                                    |mut acc, (key, val)| {
-
-                                    match key {
-
-                                        $(
-                                            $str_names => {
-                                                acc.insert($str_names, get_str(val).ok_or(PayloadDecodeError::InvalidPayload)?);
-                                            }
-                                        )*
-                                        _ => {},
-                                    }
-
-                                    Ok(acc)
-                                })?;
-
-                    };
+                    // Construct a variant that has named field
+                    let mut names = Vec::new();
 
                     // construction arms
                     let fields_construction = 
@@ -97,10 +86,11 @@ pub fn derive(input: TokenStream) -> TokenStream {
                                         // todo: add primitive types like u32
                                         if !path.is_ident("String") { panic!("Unsupported type {:?}", path); }
                                         let name = LitStr::new(ident.to_string().as_str(), ident.span());
+                                        names.push(name.clone());
                                         
                                         // generate code for String
                                         quote! {
-                                            #path: map.remove(#name).ok()?.to_owned(),
+                                            #path: map.remove(#name)?,
                                         }
                                     },
                                     _ => panic!("unsupported type {:?}", field.ty),
@@ -110,15 +100,55 @@ pub fn derive(input: TokenStream) -> TokenStream {
                                 quote! { #acc
                                     #ts }
                             });
+                    
+                    let map_decode_match_arm = names
+                        .into_iter()
+                        .fold(proc_macro2::TokenStream::new(), |acc, name| {
+                            quote! {
+                                #acc
+                                #name => {
+                                    acc.insert(#name, #get_str);
+                                },
+                            }
+                        });
+        
+                    let map_decoding = quote! {
+                        use std::collections::Hashmap;
+                        use rmpv::ValueRef;
+
+                        let payload = #decode_payload;
+
+                        let mut map =
+                            payload
+                                .into_iter()
+                                .filter_map(|(key, val)| {
+                                    let ValueRef::String(key) = key else { None? };
+                                    key.into_str().map(|s| (s, val))
+                                })
+                                .try_fold::<_, _, Result<_, PayloadDecodeError>>(
+                                    HashMap::new(),
+                                    |mut acc, (key, val)| {
+
+                                    match key {
+                                        #map_decode_match_arm
+                                        _ => {},
+                                    }
+
+                                    Ok(acc)
+                                })?;
+                    };
 
                     (map_decoding, quote! {
-                        #enum_name::#name {
+                        #enum_name::#variant_name {
                             #fields_construction
                         }
                     })
                 }
-                syn::Fields::Unnamed(unnamed) => panic!(""),
-                syn::Fields::Unit => panic!("")
+                syn::Fields::Unnamed(_unnamed) => todo!("implement unnamed fields / array"),
+                syn::Fields::Unit => {
+                    // Construct a field that doesn't have any payload
+                    (quote! {}, quote! { #enum_name::#variant_name })
+                },
             };
             
             quote! {
@@ -131,7 +161,6 @@ pub fn derive(input: TokenStream) -> TokenStream {
         }).fold(proc_macro2::TokenStream::new(), |acc, ts| quote! { #acc #ts });
 
     let decode_packet = quote! {
-        // todo: Error
         fn decode_packet(opcode: u16, payload: &[u8]) -> Option<Self> {
             Some(match opcode {
                 #match_arms
@@ -140,5 +169,23 @@ pub fn derive(input: TokenStream) -> TokenStream {
         }
     };
 
-    todo!()
+    // not a good idea, but since this proc macro is only used internally,
+    // we output the trait before the impl block
+    quote! {
+        // todo: an  error type for this
+        pub trait Packet
+        where Self: Sized {
+            fn decode_packet(opcode: u16, payload: &[u8]) -> Option<Self>;
+    
+            fn as_opcode(&self) -> u16;
+            fn encode_payload(self) -> Vec<u8>;
+        }
+
+        impl Packet for #enum_name {
+            #decode_packet
+
+            fn as_opcode(&self) -> u16 { todo!() }
+            fn encode_payload(self) -> Vec<u8> { todo!() }
+        }
+    }.into()
 }
