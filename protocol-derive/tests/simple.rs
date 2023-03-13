@@ -6,7 +6,7 @@ where Self: Sized {
     fn decode_packet(opcode: u16, payload: &[u8]) -> Option<Self>;
 
     fn as_opcode(&self) -> u16;
-    fn encode_payload(self) -> Vec<u8>;
+    fn encode_payload(self) -> Option<Vec<u8>>;
 }
 
 #[derive(Debug, PartialEq, Packet)]
@@ -18,14 +18,14 @@ enum MyProtocol {
         name: String
     },
     #[opcode(0x2)]
-    VariantC,
+    VariantC(String, String),
 }
 
 #[test]
 fn as_opcode_test() {
     let a = MyProtocol::VariantA;
     let b = MyProtocol::VariantB { name: String::new() }; // dummy string
-    let c = MyProtocol::VariantC;
+    let c = MyProtocol::VariantC(String::new(), String::new());
 
     assert_eq!(a.as_opcode(), 0x0);
     assert_eq!(b.as_opcode(), 0x1);

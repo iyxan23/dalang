@@ -59,7 +59,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
             // fn (opcode: u16, payload: &[u8])
             // from the opcode, given, we turn the payload to construct the variant
 
-            let (map_decoding, variant_construction) = match fields {
+            let (initialization, variant_construction) = match fields {
                 syn::Fields::Named(fields) => {
                     // Construct a variant that has named field
                     let mut names = Vec::new();
@@ -94,7 +94,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
                     //         }
                     //     });
         
-                    let map_decoding = quote! {
+                    let initialization = quote! {
                         use std::collections::HashMap;
                         use rmpv::ValueRef;
 
@@ -120,13 +120,52 @@ pub fn derive(input: TokenStream) -> TokenStream {
                                 })?;
                     };
 
-                    (map_decoding, quote! {
+                    (initialization, quote! {
                         #enum_name::#variant_name {
                             #(#fields_construction),*
                         }
                     })
                 }
-                syn::Fields::Unnamed(_unnamed) => todo!("implement unnamed fields / array"),
+                syn::Fields::Unnamed(fields) => {
+                    let initialization = quote! {
+                        use rmpv::ValueRef;
+
+                        let mut payload = rmpv::decode::read_value_ref(&mut payload)
+                            .ok()
+                            .map(|v| match v {
+                                ValueRef::Array(arr) => Some(arr),
+                                _ => None,
+                            })
+                            .flatten()?;
+                    };
+
+                    let fields = fields
+                        .unnamed
+                        .into_iter()
+                        .enumerate()
+                        .map(|(idx, field)| {
+                            let retrival = match field.ty {
+                                syn::Type::Path(TypePath { path, .. }) => {
+                                    // todo: add primitive types like u32
+                                    if !path.is_ident("String") { panic!("Unsupported type (todo: insert type)"); }
+                                    
+                                    quote!(ValueRef::String(s) => s.into_string()?)
+                                },
+                                _ => panic!("unsupported type (todo: insert type)"),
+                            };
+
+                            quote! {{
+                                match payload.remove(#idx) {
+                                    #retrival,
+                                    _ => return None
+                                }
+                            }}
+                        });
+
+                    (initialization, quote! {
+                        #enum_name::#variant_name(#(#fields),*)
+                    })
+                },
                 syn::Fields::Unit => {
                     // Construct a field that doesn't have any payload
                     (quote! {}, quote! { #enum_name::#variant_name })
@@ -135,7 +174,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
             
             quote! {
                 #opcode => {
-                    #map_decoding
+                    #initialization
 
                     #variant_construction
                 },
@@ -178,7 +217,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
         impl Packet for #enum_name {
             #decode_packet
             #as_opcode
-            fn encode_payload(self) -> Vec<u8> { todo!() }
+            fn encode_payload(self) -> Option<Vec<u8>> { todo!() }
         }
     }.into()
 }
