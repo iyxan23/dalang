@@ -45,3 +45,13 @@ fn simple_decode_payload_test() {
         }
     );
 }
+
+#[test]
+fn simple_encode_payload_test() {
+    let expected: [u8; 17] = [129, 164, 110, 97, 109, 101, 170, 108, 111, 114, 101, 109, 105, 112, 115, 117, 109];
+
+    let packet = MyProtocol::VariantB { name: String::from("loremipsum") };
+    let encoded = packet.encode_payload().unwrap();
+
+    assert_eq!(encoded, expected);
+}
