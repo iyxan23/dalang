@@ -42,6 +42,8 @@ impl<AuthActor: auth::Authenticator> StreamHandler<Result<ws::Message, ws::Proto
                     code: ws::CloseCode::Unsupported,
                     description: Some(String::from("expected a binary message")),
                 }));
+
+                ctx.stop();
             },
 
             Ok(ws::Message::Close(msg)) => {
@@ -56,10 +58,14 @@ impl<AuthActor: auth::Authenticator> StreamHandler<Result<ws::Message, ws::Proto
                         )
                     ).unwrap_or(String::new())
                 );
+
+                ctx.stop();
             }
 
             Err(err) => {
                 println!("[id:{}] websocket protocol error: {:?}", self.id, err);
+
+                ctx.stop();
             }
 
             Ok(ws::Message::Binary(bin)) => {
