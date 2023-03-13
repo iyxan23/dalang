@@ -44,11 +44,6 @@ pub fn derive(input: TokenStream) -> TokenStream {
         }
     };
 
-    // let's imagine we have an enum error type
-    // enum Error {
-    //             
-    // }
-
     // generate the `Packet` trait
     // its functions are:
     //
@@ -58,6 +53,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
     //   fn encode_payload(self) -> Vec<u8>
 
     let decode_packet_match_arms = packets
+        .clone()
         .into_iter()
         .map(|(variant_name, fields, opcode)| {
             // fn (opcode: u16, payload: &[u8])
@@ -83,31 +79,23 @@ pub fn derive(input: TokenStream) -> TokenStream {
                                         names.push(name.clone());
                                         
                                         // generate code for String
-                                        quote! {
-                                            #path: map.remove(#name)?,
-                                        }
+                                        quote!(#ident: map.remove(#name)?)
                                     },
                                     _ => panic!("unsupported type (todo: insert type)"),
                                 }
-                            })
-                            .fold(proc_macro2::TokenStream::new(), |acc, ts| {
-                                quote! { #acc
-                                    #ts }
-                            });
+                            }).collect::<Vec<proc_macro2::TokenStream>>();
                     
-                    let map_decode_match_arm = names
-                        .into_iter()
-                        .fold(proc_macro2::TokenStream::new(), |acc, name| {
-                            quote! {
-                                #acc
-                                #name => {
-                                    acc.insert(#name, #get_str);
-                                },
-                            }
-                        });
+                    // let map_decode_match_arm = names
+                    //     .into_iter()
+                    //     .fold(proc_macro2::TokenStream::new(), |acc, name| {
+                    //         quote! {
+                    //             #acc
+                    //             #name => acc.insert(#name, #get_str),
+                    //         }
+                    //     });
         
                     let map_decoding = quote! {
-                        use std::collections::Hashmap;
+                        use std::collections::HashMap;
                         use rmpv::ValueRef;
 
                         let payload = #decode_payload;
@@ -119,22 +107,22 @@ pub fn derive(input: TokenStream) -> TokenStream {
                                     let ValueRef::String(key) = key else { None? };
                                     key.into_str().map(|s| (s, val))
                                 })
-                                .try_fold::<_, _, Result<_, PayloadDecodeError>>(
+                                .try_fold(
                                     HashMap::new(),
                                     |mut acc, (key, val)| {
 
                                     match key {
-                                        #map_decode_match_arm
-                                        _ => {},
-                                    }
+                                        #(#names => acc.insert(#names, #get_str),)*
+                                        _ => None,
+                                    };
 
-                                    Ok(acc)
+                                    Some(acc)
                                 })?;
                     };
 
                     (map_decoding, quote! {
                         #enum_name::#variant_name {
-                            #fields_construction
+                            #(#fields_construction),*
                         }
                     })
                 }
@@ -155,7 +143,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
         }).fold(proc_macro2::TokenStream::new(), |acc, ts| quote! { #acc #ts });
 
     let decode_packet = quote! {
-        fn decode_packet(opcode: u16, payload: &[u8]) -> Option<Self> {
+        fn decode_packet(opcode: u16, mut payload: &[u8]) -> Option<Self> {
             Some(match opcode {
                 #decode_packet_match_arms
                 _ => return None,
