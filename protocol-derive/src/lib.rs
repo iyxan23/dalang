@@ -1,4 +1,5 @@
 use proc_macro::{TokenStream};
+use proc_macro2::Span;
 use quote::quote;
 use syn::{parse_macro_input, DeriveInput, Data, TypePath, LitStr};
 
@@ -191,6 +192,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
     };
 
     let as_opcode_packets = packets
+        .clone()
         .into_iter()
         .map(|(ident, fields, opcode)| {
             if fields.is_empty() {
@@ -212,12 +214,72 @@ pub fn derive(input: TokenStream) -> TokenStream {
         }
     };
 
+    let encode_payload_packets = packets
+        .into_iter()
+        .map(|(ident, fields, _opcode)| {
+            if fields.is_empty() {
+                quote!(#enum_name::#ident => vec![])
+            } else {
+                match fields {
+                    syn::Fields::Named(named) => {
+                        let names = named.named
+                            .into_iter()
+                            .map(|field| field.ident.unwrap())
+                            .collect::<Vec<syn::Ident>>();
+
+                        let names_lit = names
+                            .clone().into_iter()
+                            .map(|name| LitStr::new(&name.to_string(), name.span()));
+
+                        quote! {
+                            #enum_name::#ident { #(#names),* } => {
+                                use rmpv::Value;
+                                let mut res = Vec::new();
+                                rmpv::encode::write_value(&mut res, &Value::Map(vec![
+                                    #((#names_lit.into(), #names.into())),*
+                                ])).ok()?;
+                                res
+                            }
+                        }
+                    },
+                    syn::Fields::Unnamed(unnamed) => {
+                        let len = unnamed.unnamed.len();
+                        let names = (0..len).map(|num| {
+                            let ident = syn::Ident::new(&format!("p{}", num), Span::call_site());
+                            quote!(#ident)
+                        });
+                        let retrival = names.clone().map(|name| quote!(#name.into()));
+
+                        quote! {
+                            #enum_name::#ident(#(#names),*) => {
+                                use rmpv::Value;
+                                let mut res = Vec::new();
+                                rmpv::encode::write_value(&mut res, &Value::Array(vec![
+                                    #(#retrival),*
+                                ])).ok()?;
+                                res
+                            }
+                        }
+                    },
+                    _ => unreachable!(),
+                }
+            }
+        });
+
+    let encode_payload = quote! {
+        fn encode_payload(self) -> Option<Vec<u8>> {
+            Some(match self {
+                #(#encode_payload_packets),*
+            })
+        }
+    };
+
     // todo: an error type for this
     quote! {
         impl Packet for #enum_name {
             #decode_packet
             #as_opcode
-            fn encode_payload(self) -> Option<Vec<u8>> { todo!() }
+            #encode_payload
         }
     }.into()
 }
