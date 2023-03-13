@@ -57,7 +57,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
     //   fn as_opcode(&self) -> u16
     //   fn encode_payload(self) -> Vec<u8>
 
-    let match_arms = packets
+    let decode_packet_match_arms = packets
         .into_iter()
         .map(|(variant_name, fields, opcode)| {
             // fn (opcode: u16, payload: &[u8])
@@ -157,9 +157,31 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let decode_packet = quote! {
         fn decode_packet(opcode: u16, payload: &[u8]) -> Option<Self> {
             Some(match opcode {
-                #match_arms
+                #decode_packet_match_arms
                 _ => return None,
             })
+        }
+    };
+
+    let as_opcode_packets = packets
+        .into_iter()
+        .map(|(ident, fields, opcode)| {
+            if fields.is_empty() {
+                quote!(Self::#ident => #opcode)
+            } else {
+                match fields {
+                    syn::Fields::Named(_) => quote!(Self::#ident { .. } => #opcode),
+                    syn::Fields::Unnamed(_) => quote!(Self::#ident(..) => #opcode),
+                    _ => unreachable!()
+                }
+            }
+        });
+
+    let as_opcode = quote! {
+        fn as_opcode(&self) -> u16 {
+            match self {
+                #(#as_opcode_packets),*
+            }
         }
     };
 
@@ -167,8 +189,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
     quote! {
         impl Packet for #enum_name {
             #decode_packet
-
-            fn as_opcode(&self) -> u16 { todo!() }
+            #as_opcode
             fn encode_payload(self) -> Vec<u8> { todo!() }
         }
     }.into()
