@@ -1,8 +1,8 @@
 use proc_macro::{TokenStream};
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput, Data, TypePath, LitStr, Token, punctuated::Punctuated};
+use syn::{parse_macro_input, DeriveInput, Data, TypePath, LitStr};
 
-#[proc_macro_derive(Packet)]
+#[proc_macro_derive(Packet, attributes(opcode))]
 pub fn derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
@@ -17,17 +17,12 @@ pub fn derive(input: TokenStream) -> TokenStream {
     for variant in variants {
         let Some(opcode) = variant
             .attrs
-            .iter()
+            .into_iter()
             .find_map(|attr|
-                attr.path.is_ident("opcode").then(|| {
-                    let Ok(int) = syn::parse2::<syn::LitInt>(attr.tokens.clone())
-                        else { panic!("Invalid opcode value"); };
-                    int
-                })) else {
-                    panic!("Variant with no opcode");
-                };
+                attr.path.is_ident("opcode").then(|| Some(attr.parse_args::<syn::Expr>().ok()?)).flatten()
+            ) else { panic!("Variant with no opcode") };
 
-        packets.push((variant, opcode));
+        packets.push((variant.ident, variant.fields, opcode));
     }
 
     let decode_payload = quote! {
@@ -64,12 +59,11 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
     let match_arms = packets
         .into_iter()
-        .map(|(variant, int)| {
+        .map(|(variant_name, fields, opcode)| {
             // fn (opcode: u16, payload: &[u8])
             // from the opcode, given, we turn the payload to construct the variant
-            let variant_name = variant.ident;
 
-            let (map_decoding, variant_construction) = match variant.fields {
+            let (map_decoding, variant_construction) = match fields {
                 syn::Fields::Named(fields) => {
                     // Construct a variant that has named field
                     let mut names = Vec::new();
@@ -84,7 +78,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
                                 match field.ty {
                                     syn::Type::Path(TypePath { path, .. }) => {
                                         // todo: add primitive types like u32
-                                        if !path.is_ident("String") { panic!("Unsupported type {:?}", path); }
+                                        if !path.is_ident("String") { panic!("Unsupported type (todo: insert type)"); }
                                         let name = LitStr::new(ident.to_string().as_str(), ident.span());
                                         names.push(name.clone());
                                         
@@ -93,7 +87,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
                                             #path: map.remove(#name)?,
                                         }
                                     },
-                                    _ => panic!("unsupported type {:?}", field.ty),
+                                    _ => panic!("unsupported type (todo: insert type)"),
                                 }
                             })
                             .fold(proc_macro2::TokenStream::new(), |acc, ts| {
@@ -152,7 +146,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
             };
             
             quote! {
-                #int => {
+                #opcode => {
                     #map_decoding
 
                     #variant_construction
@@ -169,18 +163,8 @@ pub fn derive(input: TokenStream) -> TokenStream {
         }
     };
 
-    // not a good idea, but since this proc macro is only used internally,
-    // we output the trait before the impl block
+    // todo: an error type for this
     quote! {
-        // todo: an  error type for this
-        pub trait Packet
-        where Self: Sized {
-            fn decode_packet(opcode: u16, payload: &[u8]) -> Option<Self>;
-    
-            fn as_opcode(&self) -> u16;
-            fn encode_payload(self) -> Vec<u8>;
-        }
-
         impl Packet for #enum_name {
             #decode_packet
 
