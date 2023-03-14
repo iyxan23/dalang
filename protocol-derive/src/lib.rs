@@ -143,8 +143,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
                     let fields = fields
                         .unnamed
                         .into_iter()
-                        .enumerate()
-                        .map(|(idx, field)| {
+                        .map(|field| {
                             let retrival = match field.ty {
                                 syn::Type::Path(TypePath { path, .. }) => {
                                     // todo: add primitive types like u32
@@ -156,7 +155,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
                             };
 
                             quote! {{
-                                match payload.remove(#idx) {
+                                match payload.remove(0) {
                                     #retrival,
                                     _ => return None
                                 }
