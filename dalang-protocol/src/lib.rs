@@ -19,7 +19,6 @@ mod error;
 
 pub use error::PacketCategoryDecodeError;
 pub use error::PacketDecodeError;
-pub use error::PayloadDecodeError;
 
 // maybe cache this in some way? I'm too lazy to use `lazy_static` (pun intended)
 /// Generates a packet that contains the version information of the protocol
@@ -77,10 +76,8 @@ impl TryFrom<&[u8]> for ClientPacket {
             Category::Authentication => 
                 ClientPacket::Authentication(
                     authentication::ClientAuthenticationPacket
-                        ::decode_from(opcode, &value)
-
-                        // include category as needed by the From trait
-                        .map_err(|e| (category, e))?
+                        ::decode_packet(opcode, &value)
+                        .ok_or_else(|| PacketDecodeError::InvalidPayload { category, opcode })?
                 ),
             Category::User => todo!(),
             Category::Editor => todo!(),
@@ -126,67 +123,15 @@ impl TryFrom<u16> for Category {
     }
 }
 
-// === Trait PacketDecoder
-// This trait should be implemented of all packet structs.
-trait PacketDecoder
+/// The trait that will be implemented in every packets
+pub trait Packet
 where Self: Sized {
-    type Opcode: Into<u16> + TryFrom<u16>;
+    fn decode_packet(opcode: u16, payload: &[u8]) -> Option<Self>;
 
-    fn decode_from(opcode: u16, payload: &[u8]) -> Result<Self, PacketCategoryDecodeError<Self::Opcode>>;
+    fn as_opcode(&self) -> u16;
+    fn encode_payload(self) -> Option<Vec<u8>>;
 }
 
-// === Trait PayloadDecoder
-// This trait should be implemented for payload packet structs.
-trait PayloadDecoder
-where Self: Sized {
-    type Opcode: Into<u16> + TryFrom<u16>;
-
-    fn decode_payload(opcode: Self::Opcode, payload: &[u8]) -> Result<Option<Self>, PayloadDecodeError>;
-}
-
-macro_rules! decode_payload {
-    { $payload:ident; $typ:path => { $($str_names:expr => $names:ident),* $(,)? } } => {
-        use crate::{decode_payload, get_str};
-        use rmpv::ValueRef;
-        use std::collections::HashMap;
-
-        let payload = decode_payload($payload)
-            .ok_or(PayloadDecodeError::InvalidPayload)?;
-
-        // we loop over the values, check needed ones and skip other fields
-        //
-        // this is to future-proof where maybe recent versions might have
-        // some other fields
-        let mut map =
-            payload
-                .into_iter()
-                .filter_map(|(key, val)| {
-                    let ValueRef::String(key) = key else { None? };
-                    key.into_str().map(|s| (s, val))
-                })
-                .try_fold::<_, _, Result<_, PayloadDecodeError>>(
-                    HashMap::new(),
-                    |mut acc, (key, val)| {
-
-                    match key {
-                        $(
-                            $str_names => {
-                                acc.insert($str_names, get_str(val).ok_or(PayloadDecodeError::InvalidPayload)?);
-                            }
-                        )*
-                        _ => {},
-                    }
-
-                    Ok(acc)
-                })?;
-
-        $typ {
-            $(
-                $names: map.remove($str_names).ok_or(PayloadDecodeError::InvalidPayload)?.to_owned(),
-            )*
-        }
-    };
-}
 
 // +===========================+
 // |     Packet Categories     |
@@ -201,143 +146,39 @@ macro_rules! decode_payload {
 
 // >> Authentication Packet Category
 pub mod authentication {
-    use super::{PacketCategoryDecodeError, PacketDecoder, PayloadDecodeError, PayloadDecoder};
+    use super::Packet;
+    use protocol_derive::Packet;
 
-    #[derive(Clone, Debug, PartialEq)]
-    pub struct ClientAuthenticationPacket {
-        pub opcode: ClientOpcode,
-        pub payload: Option<ClientPacketPayload>,
-    }
-
-    impl PacketDecoder for ClientAuthenticationPacket {
-        type Opcode = ClientOpcode;
-
-        fn decode_from(opcode: u16, payload: &[u8]) -> Result<Self, PacketCategoryDecodeError<Self::Opcode>> {
-            let opcode = ClientOpcode::try_from(opcode)
-                .map_err(|_| PacketCategoryDecodeError::UnknownOpcode { opcode })?;
-
-            Ok(ClientAuthenticationPacket {
-                opcode,
-                payload: ClientPacketPayload::decode_payload(opcode, payload)
-                    .map_err(|err| (opcode, err))?
-            })
-        }
-    }
-
-    #[derive(Clone, Debug, PartialEq)]
-    pub struct ServerAuthenticationPacket {
-        pub opcode: ServerOpcode,
-        pub payload: Option<ServerPacketPayload>,
-    }
-
-    #[repr(u16)]
-    #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-    pub enum ClientOpcode {
-        SuccessResp = 0x00,
-
-        Login = 0x10, // Data: { username: str, password: str }
-        LoginWithToken = 0x11, // Data: { token: str }
-        Register = 0x20, // Data: { username: str, password: str }
-        RegisterCheckEnabled = 0x21, // Response: 0x21 or 0x00
-
-        UsernameCheckExists = 0xf0, // Response: 0x00 or 0x02
-
-        Logout = 0x00ff,
-    }
-
-    impl Into<u16> for ClientOpcode {
-        fn into(self) -> u16 { self as u16 }
-    }
-    
-    // todo: make these to be generated automatically using macros
-    impl TryFrom<u16> for ClientOpcode {
-        type Error = ();
-
-        fn try_from(value: u16) -> Result<Self, Self::Error> {
-            Ok(match value {
-                0x00 => ClientOpcode::SuccessResp,
-
-                0x10 => ClientOpcode::Login,
-                0x11 => ClientOpcode::LoginWithToken,
-                0x20 => ClientOpcode::Register,
-                0x21 => ClientOpcode::RegisterCheckEnabled,
-
-                0xf0 => ClientOpcode::UsernameCheckExists,
-
-                0x00ff => ClientOpcode::Logout,
-                _ => Err(())?
-            })
-        }
-    }
-
-    #[derive(Clone, Debug, PartialEq)]
-    pub enum ClientPacketPayload {
-        Login {
+    #[derive(Packet)]
+    pub enum ClientAuthenticationPacket {
+        #[opcode(0x00)] SuccessResp,
+        #[opcode(0x10)] Login {
             username: String,
             password: String,
         },
-        LoginWithToken {
+        #[opcode(0x11)] LoginWithToken {
             token: String
         },
-        Register {
+        #[opcode(0x20)] Register {
             username: String,
-            password: String
+            password: String,
         },
+        #[opcode(0x21)] RegisterCheckEnabled,
+        #[opcode(0xf0)] UsernameCheckExists,
+        #[opcode(0x00ff)] Logout,
     }
 
-    impl PayloadDecoder for ClientPacketPayload {
-        type Opcode = ClientOpcode;
-
-        fn decode_payload(opcode: Self::Opcode, payload: &[u8]) -> Result<Option<Self>, PayloadDecodeError> {
-            Ok(Some(match opcode {
-                ClientOpcode::Login => {
-                    decode_payload! { payload;
-                        Self::Login => {
-                            "username" => username,
-                            "password" => password,
-                        }
-                    }
-                },
-                ClientOpcode::LoginWithToken => {
-                    decode_payload! { payload;
-                        Self::LoginWithToken => {
-                            "token" => token
-                        }
-                    }
-                },
-                ClientOpcode::Register => {
-                    decode_payload! { payload;
-                        Self::Register => {
-                            "username" => username,
-                            "password" => password,
-                        }
-                    }
-                },
-                _ => return Ok(None)
-            }))
-        }
-    }
-
-    #[repr(u16)]
-    #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-    pub enum ServerOpcode {
-        SuccessResp = 0x00,
-        
-        LoginFailedInvalidUsernameWrongPassword = 0x10,
-        LoginFailedTokenExpired = 0x11,
-        LoginSuccess = 0x12, // Data: { token: str }
-
-        RegisterFailedUsernameTaken = 0x20,
-        RegisterFailedFeatureDisabled = 0x21,
-
-        ErrorAlreadyLoggedIn = 0xffff,
-    }
-
-    #[derive(Clone, Debug, PartialEq)]
-    pub enum ServerPacketPayload {
-        LoginSuccess {
-            token: String,
-        }
+    #[derive(Packet)]
+    pub enum ServerAuthenticationPacket {
+        #[opcode(0x00)] SuccessResp,
+        #[opcode(0x10)] LoginFailedInvalidUsernameWrongPassword,
+        #[opcode(0x11)] LoginFailedTokenExpired,
+        #[opcode(0x12)] LoginSuccess {
+            token: String
+        },
+        #[opcode(0x20)] RegisterFailedUsernameTaken,
+        #[opcode(0x21)] RegisterFailedFeatureDisabled,
+        #[opcode(0xffff)] ErrorAlreadyLoggedIn,
     }
 }
 
@@ -456,27 +297,3 @@ pub mod editor {
     pub enum ServerPacketPayload {
     }
 }
-
-// ======== Utilities ========
-
-// use rmpv to decode the payload to a map
-/// Decode a payload into a [`Vec<(ValueRef, ValueRef)>`], otherwise return an `Err`.
-pub(crate) fn decode_payload(mut payload: &[u8]) -> Option<Vec<(ValueRef, ValueRef)>> {
-    rmpv::decode::read_value_ref(&mut payload)
-        .ok()
-        .map(|v| match v {
-            ValueRef::Map(map) => Some(map),
-            _ => None,
-        })
-        .flatten()
-}
-
-/// Try to get a [`&str`] from a [`ValueRef`], otherwise return `None`.
-pub(crate) fn get_str<'a>(val: ValueRef<'a>) -> Option<&'a str> {
-    let ValueRef::String(val) = val else { None? };
-    let Some(val) = val.into_str() else { None? };
-
-    Some(val)
-}
-
-// ======== /Utilities ========

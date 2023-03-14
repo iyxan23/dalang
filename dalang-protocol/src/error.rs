@@ -75,31 +75,3 @@ where Opcode: Into<u16> + TryFrom<u16>
         }
     }
 }
-
-impl<Opcode> From<(Opcode, PayloadDecodeError)> for PacketCategoryDecodeError<Opcode>
-where Opcode: Into<u16> + TryFrom<u16>
-{
-    fn from((opcode, err): (Opcode, PayloadDecodeError)) -> Self {
-        match err {
-            PayloadDecodeError::InvalidPayload
-                => PacketCategoryDecodeError::InvalidPayload { opcode },
-            PayloadDecodeError::Msgpack(mp)
-                => PacketCategoryDecodeError::Msgpack(mp),
-        }
-    }
-}
-
-// === Packet Payload Decode Error
-#[derive(Debug)]
-pub enum PayloadDecodeError {
-    InvalidPayload,
-    Msgpack(ValueReadError)
-}
-
-impl From<ValueReadError> for PayloadDecodeError {
-    fn from(value: ValueReadError) -> Self { PayloadDecodeError::Msgpack(value) }
-}
-
-impl From<MarkerReadError> for PayloadDecodeError {
-    fn from(value: MarkerReadError) -> Self { PayloadDecodeError::Msgpack(value.into()) }
-}
