@@ -1,5 +1,4 @@
 use rmp::{encode::{ValueWriteError, write_array_len, write_u8, write_str_len, write_str}, decode::{read_marker, read_u32}};
-use rmpv::ValueRef;
 
 // might be a good idea to use the version specified on the cargo manifest file
 // but it'd be a problem converting it into these MAJOR, MINOR, and PATCH vars
@@ -149,7 +148,7 @@ pub mod authentication {
     use super::Packet;
     use protocol_derive::Packet;
 
-    #[derive(Packet)]
+    #[derive(Debug, PartialEq, Packet)]
     pub enum ClientAuthenticationPacket {
         #[opcode(0x00)] SuccessResp,
         #[opcode(0x10)] Login {
@@ -168,7 +167,7 @@ pub mod authentication {
         #[opcode(0x00ff)] Logout,
     }
 
-    #[derive(Packet)]
+    #[derive(Debug, PartialEq, Packet)]
     pub enum ServerAuthenticationPacket {
         #[opcode(0x00)] SuccessResp,
         #[opcode(0x10)] LoginFailedInvalidUsernameWrongPassword,

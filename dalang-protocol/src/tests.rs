@@ -1,11 +1,6 @@
-use super::{
-    authentication::{
-        ClientAuthenticationPacket,
-        ClientOpcode as AuthClientOpcode,
-        ClientPacketPayload as AuthClientPacketPayload
-    },
-    PacketDecoder, Category
-};
+use crate::Packet;
+
+use super::{authentication::{ClientAuthenticationPacket}, Category};
 
 #[test]
 fn test_categories() {
@@ -28,17 +23,14 @@ fn test_client_auth_packet_login() {
         100, 165, 105, 112, 115, 117, 109
     ];
     
-    let packet = ClientAuthenticationPacket::decode_from(0x10, &payload)
+    let packet = ClientAuthenticationPacket::decode_packet(0x10, &payload)
         .expect("Failed to decode packet");
 
     assert_eq!(
         packet,
-        ClientAuthenticationPacket {
-            opcode: AuthClientOpcode::Login,
-            payload: Some(AuthClientPacketPayload::Login {
-                username: "lorem".to_string(),
-                password: "ipsum".to_string()
-            })
+        ClientAuthenticationPacket::Login {
+            username: "lorem".to_string(),
+            password: "ipsum".to_string()
         }
     )
 }
