@@ -1,4 +1,4 @@
-use actix::{Actor, StreamHandler, Handler, Addr};
+use actix::{Actor, ActorContext, StreamHandler, Handler, Addr};
 use actix_web_actors::ws;
 
 use crate::{server::DalangServer, auth};
