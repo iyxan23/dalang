@@ -19,6 +19,13 @@ enum MyProtocol {
     },
     #[opcode(0x2)]
     VariantC(String, String),
+
+    #[opcode(0x3)]
+    VariantD {
+        number: u32
+    },
+    #[opcode(0x4)]
+    VariantE(u32)
 }
 
 #[test]
@@ -92,4 +99,24 @@ fn unnamed_encode_payload_test() {
     let encoded = packet.encode_payload().unwrap();
 
     assert_eq!(encoded, expected);
+}
+
+#[test]
+fn named_encode_u32_payload_test() {
+    let expected: [u8; 13] = [129, 166, 110, 117, 109, 98, 101, 114, 206, 0, 1, 226, 64];
+
+    let packet = MyProtocol::VariantD { number: 123456 };
+    let encoded = packet.encode_payload().unwrap();
+
+    assert_eq!(encoded, expected);
+}
+
+#[test]
+fn named_decode_u32_payload_test() {
+    let payload: [u8; 13] = [129, 166, 110, 117, 109, 98, 101, 114, 206, 0, 1, 226, 64];
+    let ret = MyProtocol::decode_packet(0x3, &payload).unwrap();
+
+    let expected = MyProtocol::VariantD { number: 123456 };
+
+    assert_eq!(ret, expected);
 }

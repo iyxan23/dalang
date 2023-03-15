@@ -45,6 +45,13 @@ pub fn derive(input: TokenStream) -> TokenStream {
         }
     };
 
+    let get_num = quote! {
+        {
+            let ValueRef::Integer(int) = val else { None? };
+            int.as_u64()
+        }
+    };
+
     // generate the `Packet` trait
     // its functions are:
     //
@@ -74,13 +81,28 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
                                 match field.ty {
                                     syn::Type::Path(TypePath { path, .. }) => {
-                                        // todo: add primitive types like u32
-                                        if !path.is_ident("String") { panic!("Unsupported type (todo: insert type)"); }
                                         let name = LitStr::new(ident.to_string().as_str(), ident.span());
                                         names.push(name.clone());
-                                        
-                                        // generate code for String
-                                        quote!(#ident: map.remove(#name)?)
+
+                                        if path.is_ident("String") {
+                                            quote! {
+                                                #ident: {
+                                                    let val = map.remove(#name)?;
+                                                    let val = #get_str;
+                                                    val
+                                                }
+                                            }
+                                        } else if path.is_ident("u32") {
+                                            quote! {
+                                                #ident: {
+                                                    let val = map.remove(#name)?;
+                                                    let num = #get_num? as u32;
+                                                    num
+                                                }
+                                            }
+                                        } else {
+                                            panic!("Unsupported type of field")
+                                        }
                                     },
                                     _ => panic!("unsupported type (todo: insert type)"),
                                 }
@@ -108,17 +130,17 @@ pub fn derive(input: TokenStream) -> TokenStream {
                                     let ValueRef::String(key) = key else { None? };
                                     key.into_str().map(|s| (s, val))
                                 })
-                                .try_fold(
+                                .fold(
                                     HashMap::new(),
                                     |mut acc, (key, val)| {
 
                                     match key {
-                                        #(#names => acc.insert(#names, #get_str),)*
+                                        #(#names => acc.insert(#names, val),)*
                                         _ => None,
                                     };
 
-                                    Some(acc)
-                                })?;
+                                    acc
+                                });
                     };
 
                     (initialization, quote! {
@@ -146,10 +168,13 @@ pub fn derive(input: TokenStream) -> TokenStream {
                         .map(|field| {
                             let retrival = match field.ty {
                                 syn::Type::Path(TypePath { path, .. }) => {
-                                    // todo: add primitive types like u32
-                                    if !path.is_ident("String") { panic!("Unsupported type (todo: insert type)"); }
-                                    
-                                    quote!(ValueRef::String(s) => s.into_string()?)
+                                    if path.is_ident("String") {
+                                        quote!(ValueRef::String(s) => s.into_string()?)
+                                    } else if path.is_ident("u32") {
+                                        quote!(ValueRef::Integer(i) => i.as_u64()? as u32)
+                                    } else {
+                                        panic!("Unsupported type of field")
+                                    }
                                 },
                                 _ => panic!("unsupported type (todo: insert type)"),
                             };
