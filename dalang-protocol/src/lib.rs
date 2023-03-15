@@ -78,7 +78,12 @@ impl TryFrom<&[u8]> for ClientPacket {
                         ::decode_packet(opcode, &value)
                         .ok_or_else(|| PacketDecodeError::InvalidPayload { category, opcode })?
                 ),
-            Category::User => todo!(),
+            Category::User =>
+                ClientPacket::User(
+                    user::ClientUserPacket
+                        ::decode_packet(opcode, &value)
+                        .ok_or_else(|| PacketDecodeError::InvalidPayload { category, opcode })?
+                ),
             Category::Editor => todo!(),
         })
     }
