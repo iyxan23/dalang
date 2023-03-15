@@ -1,5 +1,8 @@
-<img src=".github/icon.svg" align=left height="130px" width="130px">
+<img src=".github/icon.svg" align=left height="150px" width="150px">
 <h1>Dalang</h1>
+
+[![Rust](https://github.com/Iyxan23/dalang/actions/workflows/rust.yml/badge.svg)](https://github.com/Iyxan23/dalang/actions/workflows/rust.yml)
+[![Hits-of-Code](https://hitsofcode.com/github/iyxan23/dalang?branch=main&label=Hits-of-Code)](https://hitsofcode.com/github/iyxan23/dalang/view?branch=main&label=Hits-of-Code)
 
 A video editor with a client-server based approach. Powered with MLT
 
