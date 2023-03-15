@@ -148,7 +148,7 @@ pub mod authentication {
     use super::Packet;
     use protocol_derive::Packet;
 
-    #[derive(Debug, PartialEq, Packet)]
+    #[derive(Debug, Clone, PartialEq, Packet)]
     pub enum ClientAuthenticationPacket {
         #[opcode(0x00)] SuccessResp,
         #[opcode(0x10)] Login {
@@ -167,7 +167,7 @@ pub mod authentication {
         #[opcode(0x00ff)] Logout,
     }
 
-    #[derive(Debug, PartialEq, Packet)]
+    #[derive(Debug, Clone, PartialEq, Packet)]
     pub enum ServerAuthenticationPacket {
         #[opcode(0x00)] SuccessResp,
         #[opcode(0x10)] LoginFailedInvalidUsernameWrongPassword,
@@ -183,73 +183,46 @@ pub mod authentication {
 
 // >> User Packet Category
 pub mod user {
-    #[derive(Clone, Debug, PartialEq)]
-    pub struct ClientUserPacket {
-        pub opcode: ClientOpcode,
-        pub payload: Option<ClientPacketPayload>,
-    }
+    use super::Packet;
+    use protocol_derive::Packet;
 
-    #[derive(Clone, Debug, PartialEq)]
-    pub struct ServerUserPacket {
-        pub opcode: ServerOpcode,
-        pub payload: Option<ServerPacketPayload>,
-    }
+    #[derive(Debug, Clone, PartialEq, Packet)]
+    pub enum ClientUserPacket {
+        #[opcode(0x00)] SuccessResp,
 
-    #[repr(u16)]
-    #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-    pub enum ClientOpcode {
-        SuccessResp = 0x00,
+        #[opcode(0x01)] GetUsername, // Response: Server 0x00
 
-        GetUsername = 0x01, // Response: Server 0x00
-
-        RetrieveProjects = 0x10, // Response: Server 0x01
-        RetrieveProjectsPaged = 0x11, // Data: { offset: u32, count: u32 }, Response: Server 0x01
-        RetrieveProjectsTotal = 0x12, // Response: Server 0x11
-        RetrieveProjectImage = 0x13, // Data: { imgid: u32 } Response: Server 0x12
-
-        OpenProject = 0x1f, // Response: Server 0x00 (editor category (0x3))
-    }
-
-    #[derive(Clone, Debug, PartialEq)]
-    pub enum ClientPacketPayload {
-        RetrieveProjectsPaged {
+        #[opcode(0x10)] RetrieveProjects, // Response: Server 0x01
+        #[opcode(0x11)] RetrieveProjectsPaged {
             offset: u32,
-            count: u32,
-        },
-        RetrieveProjectImage {
+            count: u32
+        }, //Response: Server 0x01
+        #[opcode(0x12)] RetrieveProjectsTotal, // Response: Server 0x11
+        #[opcode(0x13)] RetrieveProjectImage {
             imgid: u32
-        }
+        }, // Response: Server 0x12
+
+        #[opcode(0x1f)] OpenProject, // Response: Server 0x00 (editor category (0x3))
     }
 
+    #[derive(Debug, Clone, PartialEq, Packet)]
+    pub enum ServerUserPacket {
+        #[opcode(0x00)] SuccessResp,
 
-    #[repr(u16)]
-    #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-    pub enum ServerOpcode {
-        SuccessResp = 0x00,
+        #[opcode(0x01)] UsernameResp { username: String },
 
-        UsernameResp = 0x01, // Data: { username: str }
+        // todo: implement inserting function for custom decoding
+        #[opcode(0x10)] ProjectsListResp {
+            // #[decode(func)]
+            projects: u32
+        }, // Data: { projects: [{ id: u32, title: str, lastedit: u64, created: u64, imgid: u32 }] }
+        #[opcode(0x11)] ProjectsTotalResp { total: u32 }, // Data: { total: u32 }
+        #[opcode(0x12)] ProjectImageResp {
+            // #[decode(func)]
+            data: u32
+        }, // Data: { data: [u8] }
 
-        ProjectsListResp = 0x10, // Data: { projects: [{ id: u32, title: str, lastedit: u64, created: u64, imgid: u32 }] }
-        ProjectsTotalResp = 0x11, // Data: { total: u32 }
-        ProjectImageResp = 0x12, // Data: { data: [u8] }
-
-        ErrorNotAuthenticated = 0xffff,
-    }
-
-    #[derive(Clone, Debug, PartialEq)]
-    pub enum ServerPacketPayload {
-        UsernameResp {
-            username: String,
-        },
-        ProjectsListResp {
-            projects: Vec<ProjectData>,
-        },
-        ProjectsTotalResp {
-            total: u32,
-        },
-        ProjectImageResp {
-            data: Vec<u8>,
-        }
+        #[opcode(0xffff)] ErrorNotAuthenticated,
     }
 
     #[derive(Clone, Debug, PartialEq)]
