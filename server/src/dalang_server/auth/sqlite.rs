@@ -63,7 +63,7 @@ impl Actor for SQLiteAuthenticator {
 
 const QUERY_USERS_CREATE: &str = r#"
 CREATE TABLE IF NOT EXISTS "users" (
-	"uid"	INTEGER NOT NULL UNIQUE,
+	"uid"	sqlite3_uint64 NOT NULL UNIQUE,
 	"username"	TEXT NOT NULL,
 	"password"	TEXT NOT NULL,
 	PRIMARY KEY("uid")
