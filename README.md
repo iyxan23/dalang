@@ -6,6 +6,12 @@
 
 A video editor with a client-server based approach. Powered with MLT
 
+Auth                           | Editor
+:-----------------------------:|:---------------------------------:
+![auth page](.github/auth.png) | ![editor page](.github/editor.png)
+
+> The interface is mostly unimplemented, the designs above acts as a reference
+
 ## What is this?
 
 A hobby project where I try to understand how video works and to make something that's somewhat production-ready. The dalang project aims to be a web-based video editor where the process happens in the server. The server is written in rust with the help of `actix-web` and good ol' `actix` actors, with the frontend being powered by vue. They use websocket and msgpack to communicate in between.
