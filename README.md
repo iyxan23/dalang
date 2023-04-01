@@ -6,9 +6,9 @@
 
 A video editor with a client-server based approach. Powered with MLT
 
-Auth                           | Editor
-:-----------------------------:|:---------------------------------:
-![auth page](.github/auth.png) | ![editor page](.github/editor.png)
+![auth page](.github/auth.png)     | ![projects list](.github/projects-list.png)
+:---------------------------------:|:----------------------------------------------:
+![editor page](.github/editor.png) | ![editor loading](.github/editor-loading.png)
 
 > The interface is mostly unimplemented, the designs above acts as a reference
 
