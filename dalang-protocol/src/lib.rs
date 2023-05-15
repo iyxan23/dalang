@@ -1,4 +1,7 @@
-use rmp::{encode::{ValueWriteError, write_array_len, write_u8, write_str_len, write_str}, decode::{read_marker, read_u32}};
+use rmp::{
+    decode::{read_marker, read_u32},
+    encode::{write_array_len, write_str, write_str_len, write_u8, ValueWriteError},
+};
 
 // might be a good idea to use the version specified on the cargo manifest file
 // but it'd be a problem converting it into these MAJOR, MINOR, and PATCH vars
@@ -45,7 +48,7 @@ pub fn protocol_version_packet() -> Result<Vec<u8>, ValueWriteError> {
 pub enum ClientPacket {
     Authentication(authentication::ClientAuthenticationPacket),
     User(user::ClientUserPacket),
-    Editor(editor::ClientEditorPacket)
+    Editor(editor::ClientEditorPacket),
 }
 
 impl TryFrom<&[u8]> for ClientPacket {
@@ -62,7 +65,7 @@ impl TryFrom<&[u8]> for ClientPacket {
         };
 
         let opcode = read_u32(&mut value)?;
-        let category = (opcode >> 16) as u16; 
+        let category = (opcode >> 16) as u16;
 
         let Ok(category): Result<Category, _> = category.try_into() else {
             // unknown category
@@ -72,18 +75,14 @@ impl TryFrom<&[u8]> for ClientPacket {
         let opcode = (opcode & 0xffff) as u16;
 
         Ok(match category {
-            Category::Authentication => 
-                ClientPacket::Authentication(
-                    authentication::ClientAuthenticationPacket
-                        ::decode_packet(opcode, &value)
-                        .ok_or_else(|| PacketDecodeError::InvalidPayload { category, opcode })?
-                ),
-            Category::User =>
-                ClientPacket::User(
-                    user::ClientUserPacket
-                        ::decode_packet(opcode, &value)
-                        .ok_or_else(|| PacketDecodeError::InvalidPayload { category, opcode })?
-                ),
+            Category::Authentication => ClientPacket::Authentication(
+                authentication::ClientAuthenticationPacket::decode_packet(opcode, &value)
+                    .ok_or_else(|| PacketDecodeError::InvalidPayload { category, opcode })?,
+            ),
+            Category::User => ClientPacket::User(
+                user::ClientUserPacket::decode_packet(opcode, &value)
+                    .ok_or_else(|| PacketDecodeError::InvalidPayload { category, opcode })?,
+            ),
             Category::Editor => todo!(),
         })
     }
@@ -102,7 +101,7 @@ impl TryInto<Vec<u8>> for ClientPacket {
 pub enum ServerPacket {
     Authentication(authentication::ServerAuthenticationPacket),
     User(user::ServerUserPacket),
-    Editor(editor::ServerEditorPacket)
+    Editor(editor::ServerEditorPacket),
 }
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
@@ -129,13 +128,14 @@ impl TryFrom<u16> for Category {
 
 /// The trait that will be implemented in every packets
 pub trait Packet
-where Self: Sized {
+where
+    Self: Sized,
+{
     fn decode_packet(opcode: u16, payload: &[u8]) -> Option<Self>;
 
     fn as_opcode(&self) -> u16;
     fn encode_payload(self) -> Option<Vec<u8>>;
 }
-
 
 // +===========================+
 // |     Packet Categories     |
@@ -155,34 +155,54 @@ pub mod authentication {
 
     #[derive(Debug, Clone, PartialEq, Packet)]
     pub enum ClientAuthenticationPacket {
-        #[opcode(0x00)] SuccessResp,
-        #[opcode(0x10)] Login {
+        #[opcode(0x00)]
+        SuccessResp,
+        #[opcode(0x10)]
+        Login {
+            #[from_cloned]
             username: String,
+            #[from_cloned]
             password: String,
         },
-        #[opcode(0x11)] LoginWithToken {
-            token: String
+        #[opcode(0x11)]
+        LoginWithToken {
+            #[from_cloned]
+            token: String,
         },
-        #[opcode(0x20)] Register {
+        #[opcode(0x20)]
+        Register {
+            #[from_cloned]
             username: String,
+            #[from_cloned]
             password: String,
         },
-        #[opcode(0x21)] RegisterCheckEnabled,
-        #[opcode(0xf0)] UsernameCheckExists,
-        #[opcode(0x00ff)] Logout,
+        #[opcode(0x21)]
+        RegisterCheckEnabled,
+        #[opcode(0xf0)]
+        UsernameCheckExists,
+        #[opcode(0x00ff)]
+        Logout,
     }
 
     #[derive(Debug, Clone, PartialEq, Packet)]
     pub enum ServerAuthenticationPacket {
-        #[opcode(0x00)] SuccessResp,
-        #[opcode(0x10)] LoginFailedInvalidUsernameWrongPassword,
-        #[opcode(0x11)] LoginFailedTokenExpired,
-        #[opcode(0x12)] LoginSuccess {
-            token: String
+        #[opcode(0x00)]
+        SuccessResp,
+        #[opcode(0x10)]
+        LoginFailedInvalidUsernameWrongPassword,
+        #[opcode(0x11)]
+        LoginFailedTokenExpired,
+        #[opcode(0x12)]
+        LoginSuccess {
+            #[from_cloned]
+            token: String,
         },
-        #[opcode(0x20)] RegisterFailedUsernameTaken,
-        #[opcode(0x21)] RegisterFailedFeatureDisabled,
-        #[opcode(0xffff)] ErrorAlreadyLoggedIn,
+        #[opcode(0x20)]
+        RegisterFailedUsernameTaken,
+        #[opcode(0x21)]
+        RegisterFailedFeatureDisabled,
+        #[opcode(0xffff)]
+        ErrorAlreadyLoggedIn,
     }
 }
 
@@ -193,41 +213,55 @@ pub mod user {
 
     #[derive(Debug, Clone, PartialEq, Packet)]
     pub enum ClientUserPacket {
-        #[opcode(0x00)] SuccessResp,
+        #[opcode(0x00)]
+        SuccessResp,
 
-        #[opcode(0x01)] GetUsername, // Response: Server 0x00
+        #[opcode(0x01)]
+        GetUsername,
 
-        #[opcode(0x10)] RetrieveProjects, // Response: Server 0x01
-        #[opcode(0x11)] RetrieveProjectsPaged {
-            offset: u32,
-            count: u32
-        }, //Response: Server 0x01
-        #[opcode(0x12)] RetrieveProjectsTotal, // Response: Server 0x11
-        #[opcode(0x13)] RetrieveProjectImage {
-            imgid: u32
-        }, // Response: Server 0x12
+        #[opcode(0x10)]
+        RetrieveProjects,
+        #[opcode(0x11)]
+        RetrieveProjectsPaged { offset: u64, count: u64 },
+        #[opcode(0x12)]
+        RetrieveProjectsTotal,
+        #[opcode(0x13)]
+        RetrieveProjectImage { imgid: u64 },
 
-        #[opcode(0x1f)] OpenProject, // Response: Server 0x00 (editor category (0x3))
+        #[opcode(0x1f)]
+        OpenProject,
     }
 
     #[derive(Debug, Clone, PartialEq, Packet)]
     pub enum ServerUserPacket {
-        #[opcode(0x00)] SuccessResp,
+        #[opcode(0x00)]
+        SuccessResp,
 
-        #[opcode(0x01)] UsernameResp { username: String },
+        #[opcode(0x01)]
+        UsernameResp {
+            #[from_cloned]
+            username: String,
+        },
 
-        // todo: implement inserting function for custom decoding
-        #[opcode(0x10)] ProjectsListResp {
-            // #[decode(func)]
-            projects: u32
-        }, // Data: { projects: [{ id: u32, title: str, lastedit: u64, created: u64, imgid: u32 }] }
-        #[opcode(0x11)] ProjectsTotalResp { total: u32 }, // Data: { total: u32 }
-        #[opcode(0x12)] ProjectImageResp {
-            // #[decode(func)]
-            data: u32
-        }, // Data: { data: [u8] }
+        #[opcode(0x10)]
+        ProjectsListResp {
+            // projects: ProjectData,
+            _temp: u64,
+        },
+        #[opcode(0x11)]
+        ProjectsTotalResp { total: u64 },
+        #[opcode(0x12)]
+        ProjectImageResp {
+            #[from_cloned]
+            data: Vec<u8>,
+        },
 
-        #[opcode(0xffff)] ErrorNotAuthenticated,
+        #[opcode(0xffff)]
+        ErrorNotAuthenticated,
+    }
+
+    fn decode_u8_array(val: rmpv::ValueRef) -> Option<Vec<u8>> {
+        todo!()
     }
 
     #[derive(Clone, Debug, PartialEq)]
@@ -237,6 +271,16 @@ pub mod user {
         pub lastedit: u64,
         pub created: u64,
         pub imgid: u32,
+    }
+
+    impl Into<rmpv::Value> for ProjectData {
+        fn into(self) -> rmpv::Value {
+            todo!()
+        }
+    }
+
+    fn decode_project_data(val: rmpv::ValueRef) -> Option<ProjectData> {
+        todo!()
     }
 }
 
@@ -259,18 +303,16 @@ pub mod editor {
     pub enum ClientOpcode {
         SuccessResp = 0x00,
     }
-    
+
     #[derive(Clone, Debug, PartialEq)]
-    pub enum ClientPacketPayload {
-    }
+    pub enum ClientPacketPayload {}
 
     #[repr(u16)]
     #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
     pub enum ServerOpcode {
         SuccessResp = 0x00,
     }
-    
+
     #[derive(Clone, Debug, PartialEq)]
-    pub enum ServerPacketPayload {
-    }
+    pub enum ServerPacketPayload {}
 }

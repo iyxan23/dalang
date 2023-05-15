@@ -2,7 +2,9 @@
 extern crate protocol_derive;
 
 pub trait Packet
-where Self: Sized {
+where
+    Self: Sized,
+{
     fn decode_packet(opcode: u16, payload: &[u8]) -> Option<Self>;
 
     fn as_opcode(&self) -> u16;
@@ -15,23 +17,27 @@ enum MyProtocol {
     VariantA,
     #[opcode(0x1)]
     VariantB {
-        name: String
+        #[from_cloned]
+        name: String,
     },
     #[opcode(0x2)]
-    VariantC(String, String),
+    VariantC(#[from_cloned] String, #[from_cloned] String),
 
     #[opcode(0x3)]
     VariantD {
-        number: u32
+        #[from_cloned]
+        number: u64,
     },
     #[opcode(0x4)]
-    VariantE(u32)
+    VariantE(#[from_cloned] u64),
 }
 
 #[test]
 fn as_opcode_test() {
     let a = MyProtocol::VariantA;
-    let b = MyProtocol::VariantB { name: String::new() }; // dummy string
+    let b = MyProtocol::VariantB {
+        name: String::new(),
+    }; // dummy string
     let c = MyProtocol::VariantC(String::new(), String::new());
 
     assert_eq!(a.as_opcode(), 0x0);
@@ -58,7 +64,9 @@ fn empty_payload_encode_test() {
 #[test]
 fn named_decode_payload_test() {
     // a payload of {"name": "loremipsum"}
-    let payload: [u8; 17] = [129, 164, 110, 97, 109, 101, 170, 108, 111, 114, 101, 109, 105, 112, 115, 117, 109];
+    let payload: [u8; 17] = [
+        129, 164, 110, 97, 109, 101, 170, 108, 111, 114, 101, 109, 105, 112, 115, 117, 109,
+    ];
 
     let ret = MyProtocol::decode_packet(0x1, &payload).unwrap();
     assert_eq!(
@@ -83,9 +91,13 @@ fn unnamed_decode_payload_test() {
 
 #[test]
 fn named_encode_payload_test() {
-    let expected: [u8; 17] = [129, 164, 110, 97, 109, 101, 170, 108, 111, 114, 101, 109, 105, 112, 115, 117, 109];
+    let expected: [u8; 17] = [
+        129, 164, 110, 97, 109, 101, 170, 108, 111, 114, 101, 109, 105, 112, 115, 117, 109,
+    ];
 
-    let packet = MyProtocol::VariantB { name: String::from("loremipsum") };
+    let packet = MyProtocol::VariantB {
+        name: String::from("loremipsum"),
+    };
     let encoded = packet.encode_payload().unwrap();
 
     assert_eq!(encoded, expected);
