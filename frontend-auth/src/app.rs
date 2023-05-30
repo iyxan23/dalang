@@ -1,4 +1,4 @@
-use leptos::*;
+use leptos::{ev::SubmitEvent, *};
 use leptos_meta::*;
 use leptos_router::*;
 
@@ -9,12 +9,14 @@ pub fn App(cx: Scope) -> impl IntoView {
 
     view! {
         cx,
-        <Stylesheet id="leptos" href="/pkg/leptos_start.css"/>
+        <Stylesheet id="leptos" href="/pkg/frontend-auth.css"/>
         <Router>
             <main>
                 <Routes>
-                    <Route path="" view=|cx| view! { cx, <HomePage/> }/>
-                    <Route path="/deez" view=|cx| view! { cx, <DeezPage/> }/>
+                    <Route path="/" view=|cx| view!{ cx, <AuthenticationPage/> } >
+                        <Route path="login" view=|cx| view! { cx, <LoginPage/> }/>
+                        <Route path="register" view=|cx| view! { cx, <RegisterPage/> }/>
+                    </Route>
                 </Routes>
             </main>
         </Router>
@@ -22,27 +24,58 @@ pub fn App(cx: Scope) -> impl IntoView {
 }
 
 #[component]
-fn HomePage(cx: Scope) -> impl IntoView {
-    let (count, set_count) = create_signal(cx, 0);
-    let on_click = move |_| set_count.update(|count| *count += 1);
-
+fn AuthenticationPage(cx: Scope) -> impl IntoView {
     view! { cx,
-        <Title text="leptos cuyyy"/>
+        <img class="dalang-logo" src="/dalang-logo.svg"/>
 
-        <h1>"Welcome to Leptos!"</h1>
-        <button on:click=on_click>"Click Me: " {count}</button>
+        <Outlet/>
     }
 }
 
 #[component]
-fn DeezPage(cx: Scope) -> impl IntoView {
-    let (count, set_count) = create_signal(cx, 0);
-    let on_click = move |_| set_count.update(|count| *count += 1);
+fn LoginPage(cx: Scope) -> impl IntoView {
+    let username_input: NodeRef<html::Input> = create_node_ref(cx);
+    let password_input: NodeRef<html::Input> = create_node_ref(cx);
+
+    let on_submit = move |ev: SubmitEvent| {
+        ev.prevent_default();
+
+        let username = username_input().expect("to exist").value();
+        let password = password_input().expect("to exist").value();
+
+        leptos::log!("username: {username}");
+        leptos::log!("password: {password}");
+    };
 
     view! { cx,
-        <Title text="deez nuts cuyyy"/>
+        <Title text="Login - Dalang" />
+        <div class="auth-card">
+            <h3 class="medium">"Login"</h3>
+            <form on:submit=on_submit>
+                <input type="text"
+                    // value=name
+                    node_ref=username_input
+                    placeholder="Username"
+                />
+                <input type="password"
+                    // value=name
+                    node_ref=password_input
+                    placeholder="Password"
+                />
 
-        <h1>"Welcome to Deez nuts!"</h1>
-        <button on:click=on_click>"Click Me: " {count}</button>
+                <input class="btn paragraph" style="margin-top: 1rem;" type="submit" value="Login"/>
+            </form>
+        </div>
+
+
+        <A href="" class="create-account paragraph">"Create account"</A>
+    }
+}
+
+#[component]
+fn RegisterPage(cx: Scope) -> impl IntoView {
+    view! { cx,
+        <Title text="Register - Dalang"/>
+        <p>"Hello Register!"</p>
     }
 }

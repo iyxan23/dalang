@@ -1,4 +1,77 @@
-body {
-	font-family: sans-serif;
-	text-align: center;
+@import "../../frontend/styles/parent.scss";
+
+.dalang-logo {
+    filter: invert(1);
+    width: 3rem;
+}
+
+main {
+    display: flex;
+
+    flex-direction: column;
+    justify-content: space-around;
+    align-items: center;
+}
+
+.auth-card {
+    display: flex;
+
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+
+    padding: 2rem 3rem;
+    gap: 2rem;
+
+    background: var(--card-on-bg);
+
+    border: var(--25-inner-white-outline);
+    box-shadow: 0px 5px 0px rgba(0, 0, 0, 0.25);
+    border-radius: 1.5rem;
+
+    h3 {
+        color: white;
+    }
+
+    form {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+
+        gap: 1rem;
+
+        input:not([type="submit"]) {
+            width: 16rem;
+
+            padding: 0.75rem 1.5rem;
+            background: rgba(0, 0, 0, 0.2);
+            border: var(--50-inner-white-outline);
+            border-radius: 0.5rem;
+
+            color: white;
+
+            transition-property: box-shadow, border, outline;
+            transition-duration: 200ms;
+            transition-timing-function: ease;
+        }
+
+        input:not([type="submit"]):focus-visible {
+            box-shadow: 0px 0px 2rem rgba(255, 255, 255, 0.1);
+            border: var(--75-inner-white-outline);
+            outline-offset: unset;
+            outline: unset;
+        }
+
+        input::placeholder {
+            @extend .paragraph;
+            color: white;
+            opacity: 0.3;
+        }
+    }
+}
+
+.create-account {
+    margin-top: 3rem;
+    color: white;
 }

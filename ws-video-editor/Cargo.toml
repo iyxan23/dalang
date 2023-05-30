@@ -1,5 +1,5 @@
 [package]
-name = "websocket-endpoint"
+name = "ws-video-editor"
 version = "0.1.0"
 edition = "2021"
 

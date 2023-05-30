@@ -1,0 +1,148 @@
+@import url("https://fonts.googleapis.com/css2?family=Nunito:wght@400;700&display=swap");
+
+:root {
+    --bg: #171e46;
+    --card-on-bg: #1f285b;
+
+    --10-inner-white-outline: 1px solid rgba(255, 255, 255, 0.1);
+    --25-inner-white-outline: 1px solid rgba(255, 255, 255, 0.25);
+    --50-inner-white-outline: 1px solid rgba(255, 255, 255, 0.5);
+    --75-inner-white-outline: 1px solid rgba(255, 255, 255, 0.75);
+
+    --btn-color: #2469bb;
+    --btn-color-hover: #3a77c2;
+}
+
+/* apply a natural box layout model to all elements, but allowing components to change */
+html {
+    box-sizing: border-box;
+}
+
+*,
+*:before,
+*:after {
+    box-sizing: inherit;
+}
+
+// set font
+* {
+    font-family: "Nunito";
+    font-style: normal;
+}
+
+body {
+    font-family: sans-serif;
+    text-align: center;
+
+    background-color: var(--bg);
+
+    padding: 0;
+    margin: 0;
+}
+
+main {
+    height: 100vh;
+    width: 100vw;
+}
+
+/* button */
+.btn {
+    padding: 0.5rem 1.5rem;
+
+    border-radius: 100px;
+    border: none;
+    background-color: var(--btn-color);
+
+    color: white;
+    outline: none;
+
+    transition: background-color 200ms ease;
+}
+
+.btn:hover {
+    background-color: var(--btn-color-hover);
+    cursor: pointer;
+}
+
+/* typography */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    margin: 0;
+    padding: 0;
+}
+
+.heading-1 {
+    font-family: "Nunito";
+    font-style: normal;
+    font-weight: 400;
+    font-size: 96px;
+    line-height: 131px;
+}
+
+.heading-2 {
+    font-family: "Nunito";
+    font-style: normal;
+    font-weight: 400;
+    font-size: 68px;
+    line-height: 93px;
+}
+
+.heading-3 {
+    font-family: "Nunito";
+    font-style: normal;
+    font-weight: 400;
+    font-size: 48px;
+    line-height: 65px;
+}
+
+.heading-4 {
+    font-family: "Nunito";
+    font-style: normal;
+    font-weight: 400;
+    font-size: 34px;
+    line-height: 46px;
+}
+
+.medium {
+    font-family: "Nunito";
+    font-style: normal;
+    font-weight: 400;
+    font-size: 24px;
+    line-height: 33px;
+}
+
+.medium-2 {
+    font-family: "Nunito";
+    font-style: normal;
+    font-weight: 400;
+    font-size: 17px;
+    line-height: 23px;
+}
+
+.paragraph {
+    font-family: "Nunito";
+    font-style: normal;
+    font-weight: 400;
+    font-size: 12px;
+    line-height: 16px;
+}
+
+.small {
+    font-family: "Nunito";
+    font-style: normal;
+    font-weight: 400;
+    font-size: 8px;
+    line-height: 11px;
+}
+
+.very-small {
+    font-family: "Nunito";
+    font-style: normal;
+    font-weight: 400;
+    font-size: 6px;
+    line-height: 8px;
+}
