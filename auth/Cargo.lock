@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "ws-video-editor"
+name = "auth"
 version = "0.1.0"

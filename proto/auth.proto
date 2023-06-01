@@ -1,0 +1,45 @@
+// A gRPC schema for the `auth` service
+
+syntax = "proto3";
+
+service AuthenticationService {
+    // To authenticate with credentials, synonymous to Login
+    rpc Authenticate(Credentials) returns (AuthenticationResult) {}
+
+    // To create an account using the given credentials
+    rpc CreateAccunt(Credentials) returns (AuthenticationResult) {}
+
+    // To get a uniquely-identifying ID for the given user
+    rpc GetUserID(Token) returns (uint64) {}
+
+    // To check if the token is valid. Expired tokens will still return false, do RefreshToken to
+    // refresh the token.
+    rpc CheckValidity(Token) returns (bool) {}
+
+    // To refresh a token, if it was valid
+    rpc RefreshToken(Token) returns (AuthenticationResult) {}
+}
+
+message Credentials {
+    string username = 0;
+    string password = 1;
+}
+
+message AuthenticationResult {
+    Status status = 0;
+
+    // A human-readable status message when Status is FAILED
+    // can be things like "Username already exists"
+    optional string error_message = 1;
+
+    Token token = 2;
+}
+
+enum Status {
+    SUCCESS = 0;
+    FAILED = 1;
+}
+
+message Token {
+    string token = 0;
+}

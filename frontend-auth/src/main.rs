@@ -7,6 +7,8 @@ async fn main() -> std::io::Result<()> {
     use leptos::*;
     use leptos_actix::{generate_route_list, LeptosRoutes};
 
+    frontend_auth::app::register_server_functions();
+
     let conf = get_configuration(None).await.unwrap();
     let addr = conf.leptos_options.site_addr;
     // Generate the list of routes in your Leptos App
@@ -17,7 +19,7 @@ async fn main() -> std::io::Result<()> {
         let site_root = &leptos_options.site_root;
 
         App::new()
-            .route("/api/{tail:.*}", leptos_actix::handle_server_fns())
+            .route("/api/auth/{tail:.*}", leptos_actix::handle_server_fns())
             .leptos_routes(
                 leptos_options.to_owned(),
                 routes.to_owned(),
