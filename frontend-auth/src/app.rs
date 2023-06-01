@@ -36,8 +36,8 @@ pub fn App(cx: Scope) -> impl IntoView {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AuthResult {
-    Success,
-    Failed(String),
+    Success { redirect_to: String },
+    Failed { error_msg: String },
 }
 
 #[server(Login, "/api/auth", "Cbor")]
@@ -71,9 +71,9 @@ pub async fn login(
         actix_web::http::header::HeaderValue::from_str(cookie.to_string().as_str()).unwrap(),
     );
 
-    return Ok(AuthResult::Failed(String::from(
-        "Invalid username or password",
-    )));
+    return Ok(AuthResult::Failed {
+        error_msg: String::from("Invalid username or password"),
+    });
 }
 
 #[server(Register, "/api/auth", "Cbor")]
@@ -107,7 +107,9 @@ pub async fn register(
         actix_web::http::header::HeaderValue::from_str(cookie.to_string().as_str()).unwrap(),
     );
 
-    return Ok(AuthResult::Success);
+    return Ok(AuthResult::Success {
+        redirect_to: String::from("deez"),
+    });
 }
 
 #[component]
@@ -145,11 +147,13 @@ fn LoginPage(cx: Scope) -> impl IntoView {
                 Err(server_err) => {
                     error_msg_write.set(Some(format!("server error: {}", server_err.to_string())));
                 }
-                Ok(AuthResult::Failed(err)) => {
-                    error_msg_write.set(Some(err));
+                Ok(AuthResult::Failed { error_msg }) => {
+                    error_msg_write.set(Some(error_msg));
                 }
 
-                Ok(AuthResult::Success) => {}
+                Ok(AuthResult::Success { redirect_to }) => {
+                    _ = leptos::window().location().replace(redirect_to.as_str());
+                }
             }
         }
     });
@@ -164,14 +168,15 @@ fn LoginPage(cx: Scope) -> impl IntoView {
             <h3 class="medium">"Login"</h3>
             <form on:submit=on_submit>
                 <input type="text"
-                    // value=name
                     node_ref=username_input
                     placeholder="Username"
+                    autocomplete="username"
                 />
+
                 <input type="password"
-                    // value=name
                     node_ref=password_input
                     placeholder="Password"
+                    autocomplete="current-password"
                 />
 
                 <input class="btn paragraph" style="margin-top: 1rem;" type="submit" value="Login"/>
@@ -190,41 +195,74 @@ fn RegisterPage(cx: Scope) -> impl IntoView {
     let password_input: NodeRef<html::Input> = create_node_ref(cx);
     let password_confirmation_input: NodeRef<html::Input> = create_node_ref(cx);
 
+    let (error_msg_read, error_msg_write) = create_signal(cx, None);
+    let register_action = create_server_action::<Register>(cx);
+
     let on_submit = move |ev: SubmitEvent| {
         ev.prevent_default();
+
+        error_msg_write.set(None);
 
         let username = username_input().expect("to exist").value();
         let password = password_input().expect("to exist").value();
         let password_confirmation = password_confirmation_input().expect("to exist").value();
 
-        leptos::log!("username: {username}");
-        leptos::log!("password: {password}");
-        leptos::log!("password confirm: {password_confirmation}");
+        if password != password_confirmation {
+            error_msg_write.set(Some(String::from("Passwords does not match")));
+            return;
+        }
+
+        register_action.dispatch(Register { username, password });
     };
+
+    create_effect(cx, move |_| {
+        if let Some(result) = register_action.value().get() {
+            match result {
+                Err(server_err) => {
+                    error_msg_write.set(Some(format!("server error: {}", server_err.to_string())));
+                }
+                Ok(AuthResult::Failed { error_msg }) => {
+                    error_msg_write.set(Some(error_msg));
+                }
+
+                Ok(AuthResult::Success { redirect_to }) => {
+                    _ = leptos::window().location().replace(redirect_to.as_str());
+                }
+            }
+        }
+    });
 
     view! { cx,
         <Title text="Register - Dalang" />
-        <div class="auth-card">
+        <div class="auth-card"
+            class:pending=register_action.pending()
+            class:error=move || error_msg_read().is_some()>
+
             <h3 class="medium">"Register"</h3>
             <form on:submit=on_submit>
                 <input type="text"
                     // value=name
                     node_ref=username_input
                     placeholder="Username"
+                    autocomplete="username"
                 />
                 <input type="password"
                     // value=name
                     node_ref=password_input
                     placeholder="Password"
+                    autocomplete="new-password"
                 />
                 <input type="password"
                     // value=name
                     node_ref=password_confirmation_input
                     placeholder="Password Confirmation"
+                    autocomplete="off"
                 />
 
                 <input class="btn paragraph" style="margin-top: 1rem;" type="submit" value="Register"/>
             </form>
+
+            <p id="error-msg">{error_msg_read}</p>
         </div>
 
         <A href="/login" class="create-account paragraph">"Already have an account?"</A>
