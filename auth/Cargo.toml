@@ -6,3 +6,20 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+tonic = "0.9"
+prost = "0.11"
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+
+pwhash = "1.0.0"
+dotenv = "0.15.0"
+
+mongodb = "2.5.0"
+mongodb-migrator = "0.1.8"
+serde = "1.0.163"
+
+log = "0.4.18"
+env_logger = "0.10.0"
+rand = "0.8.5"
+
+[build-dependencies]
+tonic-build = "0.9"

@@ -1,45 +1,51 @@
 // A gRPC schema for the `auth` service
 
 syntax = "proto3";
+package auth;
 
 service AuthenticationService {
-    // To authenticate with credentials, synonymous to Login
-    rpc Authenticate(Credentials) returns (AuthenticationResult) {}
+  // To authenticate with credentials, synonymous to Login
+  rpc Authenticate(Credentials) returns (AuthenticationResult) {}
 
-    // To create an account using the given credentials
-    rpc CreateAccunt(Credentials) returns (AuthenticationResult) {}
+  // To create an account using the given credentials
+  rpc CreateAccount(Credentials) returns (AuthenticationResult) {}
 
-    // To get a uniquely-identifying ID for the given user
-    rpc GetUserID(Token) returns (uint64) {}
+  // To get a uniquely-identifying ID for the given user
+  rpc GetUserID(Token) returns (UserID) {}
 
-    // To check if the token is valid. Expired tokens will still return false, do RefreshToken to
-    // refresh the token.
-    rpc CheckValidity(Token) returns (bool) {}
+  // To check if the token is valid. Expired tokens will still return false, do
+  // RefreshToken to refresh the token.
+  rpc CheckValidity(Token) returns (TokenValidity) {}
 
-    // To refresh a token, if it was valid
-    rpc RefreshToken(Token) returns (AuthenticationResult) {}
+  // To refresh a token, if it was valid
+  rpc RefreshToken(Token) returns (AuthenticationResult) {}
+}
+
+message UserID { uint64 id = 1; }
+
+message TokenValidity {
+  bool valid = 1;
+  uint64 until_epoch = 2;
 }
 
 message Credentials {
-    string username = 0;
-    string password = 1;
+  string username = 1;
+  string password = 2;
 }
 
 message AuthenticationResult {
-    Status status = 0;
+  Status status = 1;
 
-    // A human-readable status message when Status is FAILED
-    // can be things like "Username already exists"
-    optional string error_message = 1;
+  // A human-readable status message when Status is FAILED
+  // can be things like "Username already exists"
+  optional string error_message = 2;
 
-    Token token = 2;
+  Token token = 3;
 }
 
 enum Status {
-    SUCCESS = 0;
-    FAILED = 1;
+  SUCCESS = 0;
+  FAILED = 1;
 }
 
-message Token {
-    string token = 0;
-}
+message Token { string token = 1; }

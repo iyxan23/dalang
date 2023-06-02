@@ -1,31 +1,32 @@
-<picture>
-    <source srcset="https://raw.githubusercontent.com/leptos-rs/leptos/main/docs/logos/Leptos_logo_Solid_White.svg" media="(prefers-color-scheme: dark)">
-    <img src="https://raw.githubusercontent.com/leptos-rs/leptos/main/docs/logos/Leptos_logo_RGB.svg" alt="Leptos Logo">
-</picture>
+## Auth Frontend
 
-# Leptos Starter Template
+Not just a frontend, it has a small backend that connects to the auth service.
 
-This is a template for use with the [Leptos](https://github.com/leptos-rs/leptos) web framework and the [cargo-leptos](https://github.com/akesson/cargo-leptos) tool.
+Developed with rust/leptos.
 
-## Creating your template repo
+Application environment variables:
 
-If you don't have `cargo-leptos` installed you can install it with
+-   `HOMEPAGE`
 
-`cargo install cargo-leptos`
+    The url where users would get redirected to after they've logged in.
 
-Then run
+-   `AUTH_GRPC`
 
-`cargo leptos new --git leptos-rs/start`
+    The endpoint where the auth gRPC service is located.
 
-to generate a new project template.
+-   `HOST`
 
-`cd {projectname}`
+    The host where the auth and other frontends serves on.
 
-to go to your newly created project.
+Example
 
-Of course you should explore around the project structure, but the best place to start with your application code is in `src/app.rs`.
+```
+HOMEPAGE="/home"
+AUTH_GRPC="10.0.2.4:3333"
+HOST="example.com"
+```
 
-## Running your project
+## Running the frontend
 
 `cargo leptos watch`
 
@@ -39,22 +40,27 @@ By default, `cargo-leptos` uses `nightly` Rust, `cargo-generate`, and `sass`. If
 4. `npm install -g sass` - install `dart-sass` (should be optional in future)
 
 ## Executing a Server on a Remote Machine Without the Toolchain
+
 After running a `cargo leptos build --release` the minimum files needed are:
 
 1. The server binary located in `target/server/release`
 2. The `site` directory and all files within located in `target/site`
 
 Copy these files to your remote server. The directory structure should be:
+
 ```text
-leptos_start
+frontend_auth
 site/
 ```
+
 Set the following enviornment variables (updating for your project as needed):
+
 ```text
-LEPTOS_OUTPUT_NAME="leptos_start"
+LEPTOS_OUTPUT_NAME="frontend_auth"
 LEPTOS_SITE_ROOT="site"
 LEPTOS_SITE_PKG_DIR="pkg"
 LEPTOS_SITE_ADDR="127.0.0.1:3000"
 LEPTOS_RELOAD_PORT="3001"
 ```
+
 Finally, run the server binary.
